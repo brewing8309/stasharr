@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>StashDB → Prowlarr settings</title>
+  <style>
+    body { font: 14px/1.5 system-ui, -apple-system, sans-serif; max-width: 560px; margin: 32px auto; padding: 0 20px; color: #1b1e24; }
+    h1 { font-size: 20px; }
+    label { display: block; margin: 16px 0 4px; font-weight: 600; }
+    input { width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 14px; border: 1px solid #bbb; border-radius: 6px; }
+    .hint { color: #666; font-size: 12px; margin-top: 4px; }
+    .row { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
+    button { padding: 8px 16px; font-size: 14px; font-weight: 600; border: none; border-radius: 6px; cursor: pointer; color: #fff; background: #2f6fd0; }
+    button.secondary { background: #666; }
+    #status { margin-left: 6px; font-size: 13px; }
+    .ok { color: #2b7a2b; }
+    .err { color: #b03636; }
+  </style>
+</head>
+<body>
+  <h1>StashDB → Prowlarr</h1>
+
+  <label for="prowlarrUrl">Prowlarr URL</label>
+  <input id="prowlarrUrl" type="text" placeholder="http://localhost:9696" />
+  <div class="hint">Base URL of your Prowlarr instance, no trailing slash.</div>
+
+  <label for="apiKey">Prowlarr API key</label>
+  <input id="apiKey" type="password" placeholder="Settings → General → API Key" />
+  <div class="hint">Found in Prowlarr under Settings → General → Security.</div>
+
+  <label for="categories">Search categories</label>
+  <input id="categories" type="text" placeholder="6000" />
+  <div class="hint">Comma-separated Newznab/Torznab category IDs. 6000 = XXX. Leave empty for all categories.</div>
+
+  <div class="row">
+    <button id="save">Save</button>
+    <button id="test" class="secondary">Test connection</button>
+    <span id="status"></span>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
