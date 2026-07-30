@@ -1,7 +1,7 @@
 # stasharr (Firefox extension)
 
 Adds a **Search Prowlarr** button to StashDB scene pages. It searches your Prowlarr instance, and
-lets you start a download for the release you pick.
+lets you start a download for the release you pick. *100% Vibecoded with Claude*
 
 ## Features
 
