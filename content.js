@@ -2,9 +2,14 @@
  * Content script injected on stashdb.org.
  *
  * Shows a "Search Prowlarr" button only on scene pages. On click it resolves
- * the studio + female performers (via StashDB's GraphQL API, with a DOM
- * fallback), searches Prowlarr, and renders resolution-sorted results with a
- * per-release download button.
+ * the studio + female performers + date (via StashDB's GraphQL API, with a
+ * DOM fallback), searches Prowlarr, and renders resolution-sorted results
+ * with a per-release download button.
+ *
+ * If the studio+performers search comes back empty, it automatically retries
+ * with just the female performers + scene date (no studio) — some releases
+ * are tagged by date instead of by studio name. A second button lets you run
+ * that alternate search directly.
  */
 
 const SCENE_RE = /^\/scenes\/([0-9a-f-]{36})/i;
@@ -30,6 +35,7 @@ function syncButton() {
     if (!existing) injectButton();
   } else if (existing) {
     existing.remove();
+    document.getElementById("sdp-button-alt")?.remove();
     closePanel();
   }
 }
@@ -45,6 +51,14 @@ function injectButton() {
   btn.textContent = "⬇ Search Prowlarr";
   btn.addEventListener("click", onSearchClick);
   document.body.appendChild(btn);
+
+  const altBtn = document.createElement("button");
+  altBtn.id = "sdp-button-alt";
+  altBtn.type = "button";
+  altBtn.textContent = "⬇ Search Prowlarr (Date)";
+  altBtn.title = "Search by female performers + scene date, without the studio";
+  altBtn.addEventListener("click", onAltSearchClick);
+  document.body.appendChild(altBtn);
 }
 
 /* ------------------------------------------------------------------ *
@@ -55,6 +69,7 @@ async function fetchSceneViaGraphQL(sceneId) {
   const query = `query Scene($id: ID!) {
     findScene(id: $id) {
       title
+      date
       studio { name }
       performers { performer { name gender } }
     }
@@ -77,7 +92,7 @@ async function fetchSceneViaGraphQL(sceneId) {
     .map((p) => p.performer)
     .filter((p) => p && FEMALE_GENDERS.has(p.gender))
     .map((p) => p.name);
-  return { studio, females, title: scene.title };
+  return { studio, females, title: scene.title, date: scene.date || "" };
 }
 
 // DOM fallback: parse the rendered scene page. StashDB renders each performer
@@ -87,6 +102,24 @@ async function fetchSceneViaGraphQL(sceneId) {
 // title and name rather than substring-matching the shared performers
 // container, whose textContent glues every gender word onto the next name.
 const FEMALE_LABELS = new Set(["female", "transfemale"]);
+
+// No single reliable selector for the scene date across StashDB's markup, so
+// try progressively looser sources: structured data, a <time> element, then
+// a bare ISO date anywhere in the page text.
+function extractDateFromDOM() {
+  for (const el of document.querySelectorAll('script[type="application/ld+json"]')) {
+    try {
+      const data = JSON.parse(el.textContent);
+      for (const item of Array.isArray(data) ? data : [data]) {
+        if (item && item.datePublished) return item.datePublished;
+      }
+    } catch (e) { /* malformed/unrelated JSON-LD block, skip it */ }
+  }
+  const time = document.querySelector("time[datetime]");
+  if (time) return time.getAttribute("datetime");
+  const m = document.body.textContent.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  return m ? m[0] : "";
+}
 
 function fetchSceneViaDOM() {
   const studioLink = document.querySelector('a[href^="/studios/"]');
@@ -102,7 +135,7 @@ function fetchSceneViaDOM() {
     const name = (nameEl ? nameEl.textContent : a.textContent).trim();
     if (name && !females.includes(name)) females.push(name);
   });
-  return { studio, females, title: document.title };
+  return { studio, females, title: document.title, date: extractDateFromDOM() };
 }
 
 async function resolveScene(sceneId) {
@@ -118,6 +151,21 @@ async function resolveScene(sceneId) {
 function buildQuery(scene) {
   const studio = (scene.studio || "").replace(/\s+/g, "");
   return [studio, ...scene.females].filter(Boolean).join(" ").trim();
+}
+
+// Some releases are named by date instead of studio, e.g. "26.09.10" for
+// 2026-09-10. StashDB dates come as "YYYY-MM-DD"; take the last two digits
+// of the year to match that convention.
+function formatDateYYMMDD(dateStr) {
+  const m = String(dateStr || "").match(/(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[1].slice(2)}.${m[2]}.${m[3]}` : "";
+}
+
+// Fallback query used when the studio+performers search finds nothing:
+// female performers + scene date, without the studio.
+function buildAltQuery(scene) {
+  const date = formatDateYYMMDD(scene.date);
+  return [...scene.females, date].filter(Boolean).join(" ").trim();
 }
 
 /* ------------------------------------------------------------------ *
@@ -259,27 +307,15 @@ async function grabRelease(btn, release) {
  * Main click handler                                                  *
  * ------------------------------------------------------------------ */
 
-async function onSearchClick() {
-  const sceneId = currentSceneId();
-  if (!sceneId) return;
-
-  const panel = ensurePanel();
+// Sends `query` to Prowlarr and renders the loading/error state into `panel`.
+// Returns the results array, or null if nothing more should be rendered
+// (an error or empty-query message was already shown).
+async function doSearch(panel, query, emptyMessage) {
   const body = panel.querySelector(".sdp-body");
-  body.innerHTML = `<div class="sdp-loading">Reading scene…</div>`;
-
-  let scene, query;
-  try {
-    scene = await resolveScene(sceneId);
-    query = buildQuery(scene);
-  } catch (e) {
-    body.innerHTML = `<div class="sdp-empty">Could not read scene: ${e.message}</div>`;
-    return;
-  }
-
   panel.querySelector(".sdp-query").textContent = `Query: ${query || "(empty)"}`;
   if (!query) {
-    body.innerHTML = `<div class="sdp-empty">No studio or female performers found for this scene.</div>`;
-    return;
+    body.innerHTML = `<div class="sdp-empty">${emptyMessage}</div>`;
+    return null;
   }
 
   body.innerHTML = `<div class="sdp-loading">Searching Prowlarr…</div>`;
@@ -287,10 +323,57 @@ async function onSearchClick() {
     const resp = await browser.runtime.sendMessage({ type: "search", query });
     if (!resp || !resp.ok) {
       body.innerHTML = `<div class="sdp-empty">Search failed: ${(resp && resp.error) || "unknown error"}</div>`;
-      return;
+      return null;
     }
-    renderResults(panel, query, resp.results);
+    return resp.results;
   } catch (e) {
     body.innerHTML = `<div class="sdp-empty">Search failed: ${e.message}</div>`;
+    return null;
   }
+}
+
+async function resolveSceneForPanel(panel) {
+  const sceneId = currentSceneId();
+  if (!sceneId) return null;
+  const body = panel.querySelector(".sdp-body");
+  body.innerHTML = `<div class="sdp-loading">Reading scene…</div>`;
+  try {
+    return await resolveScene(sceneId);
+  } catch (e) {
+    body.innerHTML = `<div class="sdp-empty">Could not read scene: ${e.message}</div>`;
+    return null;
+  }
+}
+
+async function onSearchClick() {
+  const panel = ensurePanel();
+  const scene = await resolveSceneForPanel(panel);
+  if (!scene) return;
+
+  const query = buildQuery(scene);
+  let results = await doSearch(panel, query, "No studio or female performers found for this scene.");
+  if (results === null) return;
+
+  if (results.length === 0) {
+    const altQuery = buildAltQuery(scene);
+    if (altQuery) {
+      const altResults = await doSearch(panel, altQuery, "No female performers or date found for this scene.");
+      if (altResults === null) return;
+      renderResults(panel, altQuery, altResults);
+      return;
+    }
+  }
+
+  renderResults(panel, query, results);
+}
+
+async function onAltSearchClick() {
+  const panel = ensurePanel();
+  const scene = await resolveSceneForPanel(panel);
+  if (!scene) return;
+
+  const query = buildAltQuery(scene);
+  const results = await doSearch(panel, query, "No female performers or date found for this scene.");
+  if (results === null) return;
+  renderResults(panel, query, results);
 }

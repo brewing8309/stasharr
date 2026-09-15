@@ -6,10 +6,15 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
 ## Features
 
 - Button appears **only on scene pages** (`https://stashdb.org/scenes/<id>`).
-- Reads studio + performers via StashDB's GraphQL API (using your logged-in
-  session)
+- Reads studio + performers + date via StashDB's GraphQL API (using your
+  logged-in session)
 - "Female" = performers with gender `FEMALE` or `TRANSGENDER_FEMALE`.
 - Search query = `StudioNameNoSpaces performer1 performer2 …`.
+- If that search returns no hits, it automatically retries with
+  `performer1 performer2 … YY.MM.DD` (scene date, no studio) — some releases
+  are named by date instead of studio.
+- A second button, **⬇ Search Prowlarr (Date)**, runs that performers+date
+  search directly at any time.
 - Prowlarr search restricted to XXX category `6000` by default (configurable).
 - Results are grouped/sorted: **2160p → 1080p → 720p → other**, and within each
   group by seeders/grabs.

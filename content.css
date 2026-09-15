@@ -15,10 +15,27 @@
 #sdp-button:hover { background: #348b34; }
 #sdp-button:active { transform: translateY(1px); }
 
+#sdp-button-alt {
+  position: fixed;
+  right: 20px;
+  bottom: 64px;
+  z-index: 2147483646;
+  padding: 10px 16px;
+  font: 600 14px/1 system-ui, -apple-system, sans-serif;
+  color: #fff;
+  background: #2f6fd0;
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+#sdp-button-alt:hover { background: #3a7ee0; }
+#sdp-button-alt:active { transform: translateY(1px); }
+
 #sdp-panel {
   position: fixed;
   right: 20px;
-  bottom: 70px;
+  bottom: 112px;
   z-index: 2147483647;
   width: 440px;
   max-width: calc(100vw - 40px);
