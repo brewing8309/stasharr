@@ -81,14 +81,6 @@
   word-break: break-word;
 }
 
-.sdp-notice {
-  padding: 8px 12px;
-  color: #cfe0ff;
-  background: #223256;
-  font-size: 12px;
-  border-bottom: 1px solid #2a2e37;
-}
-
 .sdp-body { overflow-y: auto; padding: 4px 0; }
 
 .sdp-loading, .sdp-empty { padding: 16px 12px; color: #9aa0ab; }

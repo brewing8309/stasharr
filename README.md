@@ -9,32 +9,30 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
 - Reads studio + performers + date via StashDB's GraphQL API (using your
   logged-in session)
 - "Female" = performers with gender `FEMALE` or `TRANSGENDER_FEMALE`.
-- Searches Prowlarr using up to 10 progressively looser queries, stopping at
-  the first one that gets a hit (a step is skipped automatically if there's
-  nothing to search, or if it would repeat an already-tried query — e.g. a
-  performer has no alias, or the studio has no parent brand):
-  1. Studio + performers + date
-  2. Studio + performer aliases + date
-  3. Parent studio + performers + date
-  4. Studio + performers
-  5. Studio + performer aliases
-  6. Parent studio + performers
-  7. Performers + date
-  8. Performer aliases + date
-  9. Scene title + date
-  10. Scene title
+- The initial search fires 4 broad, single-concept queries at Prowlarr **in
+  parallel**, merges the results (de-duplicated by release guid), and scores
+  every release against everything known about the scene — studio, parent
+  studio, each performer (and their alias), title, and date. Only releases
+  matching **at least 2** of those criteria are shown, to filter out noise
+  from broad queries (e.g. a prolific performer's whole catalog):
+  1. Performers + date
+  2. Performers
+  3. Scene title + date
+  4. Scene title
 
   Dates are formatted `YY.MM.DD`; scene titles have parenthetical asides and
-  punctuation stripped before being used as a search term. Each step that
-  runs after the first shows a small notice in the panel that the search was
-  expanded.
-- The results panel has a **🍆 Try Harder** button to manually run the next
-  step in that list at any time, whether or not the current step had hits.
+  punctuation stripped before being used as a search term.
+- The results panel has a **🍆 Try Harder** button to manually search 7
+  narrower, studio-based fallback combinations one at a time (studio +
+  performers, parent studio + performers, performer aliases, and their
+  +date variants) — for scenes the broad pass didn't find enough for. A step
+  is skipped automatically if there's nothing to search, or it would repeat
+  an already-tried query (e.g. no alias, or the studio has no parent brand).
 - Prowlarr search restricted to XXX category `6000` by default (configurable).
 - Results are grouped by resolution (**2160p → 1080p → 720p → other**), and
-  within each group sorted by how many of the scene's search criteria
-  (studio, each performer, title, date) show up in the release name, then by
-  seeders/grabs.
+  within each group sorted by how many of the scene's search criteria show
+  up in the release name (the same score used for the minimum-2 filter),
+  then by seeders/grabs.
 - Clicking **Download** tells Prowlarr to grab the release (sends it to the
   download client configured in Prowlarr).
 - If a StashApp URL is configured, each scene page checks (via the
