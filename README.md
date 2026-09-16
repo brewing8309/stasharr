@@ -12,9 +12,10 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
 - Search query = `StudioNameNoSpaces performer1 performer2 …`.
 - If that search returns no hits, it automatically retries with
   `performer1 performer2 … YY.MM.DD` (scene date, no studio) — some releases
-  are named by date instead of studio.
-- A second button, **⬇ Search Prowlarr (Date)**, runs that performers+date
-  search directly at any time.
+  are named by date instead of studio — and shows a small notice in the panel
+  that the search was expanded.
+- The results panel has its own **⬇ Search by performers + date** button to
+  run that alternate search directly at any time.
 - Prowlarr search restricted to XXX category `6000` by default (configurable).
 - Results are grouped/sorted: **2160p → 1080p → 720p → other**, and within each
   group by seeders/grabs.

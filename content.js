@@ -8,8 +8,9 @@
  *
  * If the studio+performers search comes back empty, it automatically retries
  * with just the female performers + scene date (no studio) — some releases
- * are tagged by date instead of by studio name. A second button lets you run
- * that alternate search directly.
+ * are tagged by date instead of by studio name — and shows a small notice
+ * that the search was expanded. The results panel also has its own button to
+ * run that alternate search directly at any time.
  */
 
 const SCENE_RE = /^\/scenes\/([0-9a-f-]{36})/i;
@@ -35,7 +36,6 @@ function syncButton() {
     if (!existing) injectButton();
   } else if (existing) {
     existing.remove();
-    document.getElementById("sdp-button-alt")?.remove();
     closePanel();
   }
 }
@@ -51,14 +51,6 @@ function injectButton() {
   btn.textContent = "⬇ Search Prowlarr";
   btn.addEventListener("click", onSearchClick);
   document.body.appendChild(btn);
-
-  const altBtn = document.createElement("button");
-  altBtn.id = "sdp-button-alt";
-  altBtn.type = "button";
-  altBtn.textContent = "⬇ Search Prowlarr (Date)";
-  altBtn.title = "Search by female performers + scene date, without the studio";
-  altBtn.addEventListener("click", onAltSearchClick);
-  document.body.appendChild(altBtn);
 }
 
 /* ------------------------------------------------------------------ *
@@ -216,10 +208,25 @@ function ensurePanel() {
       <button type="button" class="sdp-close" title="Close">✕</button>
     </div>
     <div class="sdp-query"></div>
-    <div class="sdp-body"></div>`;
+    <div class="sdp-notice" hidden></div>
+    <div class="sdp-body"></div>
+    <div class="sdp-panel-foot">
+      <button type="button" class="sdp-alt-btn">⬇ Search by performers + date</button>
+    </div>`;
   panel.querySelector(".sdp-close").addEventListener("click", closePanel);
+  panel.querySelector(".sdp-alt-btn").addEventListener("click", onAltSearchClick);
   document.body.appendChild(panel);
   return panel;
+}
+
+function showNotice(panel, text) {
+  const notice = panel.querySelector(".sdp-notice");
+  notice.textContent = text;
+  notice.hidden = false;
+}
+
+function hideNotice(panel) {
+  panel.querySelector(".sdp-notice").hidden = true;
 }
 
 function fmtSize(bytes) {
@@ -359,6 +366,7 @@ async function onSearchClick() {
     if (altQuery) {
       const altResults = await doSearch(panel, altQuery, "No female performers or date found for this scene.");
       if (altResults === null) return;
+      showNotice(panel, "No hits for studio + performers — search expanded to performers + date.");
       renderResults(panel, altQuery, altResults);
       return;
     }
@@ -368,7 +376,10 @@ async function onSearchClick() {
 }
 
 async function onAltSearchClick() {
-  const panel = ensurePanel();
+  const panel = document.getElementById("sdp-panel");
+  if (!panel) return;
+  hideNotice(panel);
+
   const scene = await resolveSceneForPanel(panel);
   if (!scene) return;
 
