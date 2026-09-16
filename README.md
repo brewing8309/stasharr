@@ -27,6 +27,12 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
   seeders/grabs.
 - Clicking **Download** tells Prowlarr to grab the release (sends it to the
   download client configured in Prowlarr).
+- If a StashApp URL is configured, each scene page checks (via the
+  background script) whether that scene is already in your own Stash
+  library — matched by the StashDB stash-box ID StashApp records when a
+  scene was scraped from StashDB. If found, a small badge appears above the
+  **⬇ Search Prowlarr** button showing its resolution, linking straight to
+  the scene in your Stash instance.
 
 ## Setup
 
@@ -36,13 +42,19 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
    - **Prowlarr URL** — e.g. `http://localhost:9696`
    - **Prowlarr API key** — Prowlarr → Settings → General → Security
    - **Categories** — defaults to `6000` (XXX); comma-separated, or empty for all.
-4. Click **Test connection** to verify, then **Save**.
+   - **Stash URL** (optional) — e.g. `http://localhost:9999`, to enable the
+     "already downloaded" badge.
+   - **Stash API key** (optional) — only needed if your Stash instance
+     requires one.
+4. Click **Test Prowlarr** / **Test Stash** to verify, then **Save**.
 
 ## Usage
 
 1. Go to a scene on `stashdb.org`.
-2. Click the green **⬇ Search Prowlarr** button (bottom-right).
-3. Pick a release from the sorted list and click **Download**.
+2. If it's already in your Stash library, a badge above the button shows its
+   resolution and links to it.
+3. Click the green **⬇ Search Prowlarr** button (bottom-right).
+4. Pick a release from the sorted list and click **Download**.
 
 ## Notes
 

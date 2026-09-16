@@ -32,9 +32,21 @@
   <input id="categories" type="text" placeholder="6000" />
   <div class="hint">Comma-separated Newznab/Torznab category IDs. 6000 = XXX. Leave empty for all categories.</div>
 
+  <h1>StashApp (optional)</h1>
+  <p class="hint">If set, scene pages show a badge when the scene is already in your own Stash library.</p>
+
+  <label for="stashUrl">Stash URL</label>
+  <input id="stashUrl" type="text" placeholder="http://localhost:9999" />
+  <div class="hint">Base URL of your StashApp instance, no trailing slash.</div>
+
+  <label for="stashApiKey">Stash API key</label>
+  <input id="stashApiKey" type="password" placeholder="Settings → Security → API Key" />
+  <div class="hint">Only needed if your Stash instance requires an API key.</div>
+
   <div class="row">
     <button id="save">Save</button>
-    <button id="test" class="secondary">Test connection</button>
+    <button id="test" class="secondary">Test Prowlarr</button>
+    <button id="testStash" class="secondary">Test Stash</button>
     <span id="status"></span>
   </div>
 

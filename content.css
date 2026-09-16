@@ -15,10 +15,29 @@
 #sdp-button:hover { background: #348b34; }
 #sdp-button:active { transform: translateY(1px); }
 
+#sdp-stash-badge {
+  position: fixed;
+  right: 20px;
+  bottom: 64px;
+  z-index: 2147483646;
+  max-width: 260px;
+}
+#sdp-stash-badge a {
+  display: block;
+  padding: 8px 14px;
+  font: 600 12px/1.3 system-ui, -apple-system, sans-serif;
+  color: #fff;
+  background: #1f8a5f;
+  border-radius: 8px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
+  text-decoration: none;
+}
+#sdp-stash-badge a:hover { background: #24a06e; }
+
 #sdp-panel {
   position: fixed;
   right: 20px;
-  bottom: 70px;
+  bottom: 112px;
   z-index: 2147483647;
   width: 440px;
   max-width: calc(100vw - 40px);

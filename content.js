@@ -12,6 +12,10 @@
  * stop at the first step with a hit — showing a small notice each time the
  * search is auto-expanded. A "Try Harder" button in the results panel lets
  * you manually advance to the next step at any time, hit or not.
+ *
+ * If a StashApp instance is configured, it also checks (via the background
+ * script) whether the scene is already in that library and shows a badge
+ * with its resolution and a link, above the search button.
  */
 
 const SCENE_RE = /^\/scenes\/([0-9a-f-]{36})/i;
@@ -33,10 +37,12 @@ function syncButton() {
   lastPath = location.pathname;
 
   const existing = document.getElementById("sdp-button");
-  if (currentSceneId()) {
-    if (!existing) injectButton();
+  const sceneId = currentSceneId();
+  if (sceneId) {
+    if (!existing) injectButton(sceneId);
   } else if (existing) {
     existing.remove();
+    hideStashBadge();
     closePanel();
   }
 }
@@ -45,13 +51,18 @@ function syncButton() {
 setInterval(syncButton, 600);
 syncButton();
 
-function injectButton() {
+function injectButton(sceneId) {
   const btn = document.createElement("button");
   btn.id = "sdp-button";
   btn.type = "button";
   btn.textContent = "⬇ Search Prowlarr";
   btn.addEventListener("click", onSearchClick);
   document.body.appendChild(btn);
+
+  checkStashApp(sceneId).then((scene) => {
+    // The user may have navigated away while the lookup was in flight.
+    if (scene && currentSceneId() === sceneId) showStashBadge(scene);
+  });
 }
 
 /* ------------------------------------------------------------------ *
@@ -139,6 +150,46 @@ async function resolveScene(sceneId) {
     console.warn("[StashDB→Prowlarr] GraphQL failed, falling back to DOM:", e.message);
   }
   return fetchSceneViaDOM();
+}
+
+/* ------------------------------------------------------------------ *
+ * StashApp: "already downloaded" badge                                *
+ * ------------------------------------------------------------------ */
+
+// Asks the background script whether this StashDB scene already exists in
+// the user's own StashApp library. Returns null if it doesn't, Stash isn't
+// configured, or the lookup fails for any reason — this is a nice-to-have
+// indicator, not worth surfacing an error for.
+async function checkStashApp(sceneId) {
+  try {
+    const resp = await browser.runtime.sendMessage({ type: "checkStash", stashId: sceneId });
+    if (!resp || !resp.ok) {
+      if (resp && resp.error) console.warn("[StashDB→Prowlarr] Stash lookup failed:", resp.error);
+      return null;
+    }
+    return resp.scene || null;
+  } catch (e) {
+    console.warn("[StashDB→Prowlarr] Stash lookup failed:", e.message);
+    return null;
+  }
+}
+
+function hideStashBadge() {
+  const el = document.getElementById("sdp-stash-badge");
+  if (el) el.remove();
+}
+
+function showStashBadge(scene) {
+  hideStashBadge();
+  const badge = document.createElement("div");
+  badge.id = "sdp-stash-badge";
+  const link = document.createElement("a");
+  link.href = scene.url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = `✓ Already in Stash — ${scene.resolution}`;
+  badge.appendChild(link);
+  document.body.appendChild(badge);
 }
 
 // Some releases are named by date instead of studio, e.g. "26.09.10" for

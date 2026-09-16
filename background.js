@@ -1,18 +1,27 @@
 /*
  * Background script.
  *
- * Content scripts on stashdb.org cannot talk to a Prowlarr instance directly
- * (cross-origin), so all Prowlarr requests are proxied through here. The
- * <all_urls> host permission lets us reach whatever Prowlarr URL the user
- * configured on the options page.
+ * Content scripts on stashdb.org cannot talk to a Prowlarr or Stash instance
+ * directly (cross-origin), so all requests are proxied through here. The
+ * <all_urls> host permission lets us reach whatever URLs the user configured
+ * on the options page.
  */
 
 const DEFAULTS = {
   prowlarrUrl: "",
   apiKey: "",
   // Newznab/Torznab XXX category. Prowlarr accepts a comma separated list.
-  categories: "6000"
+  categories: "6000",
+  // The user's own StashApp instance, used to check whether a StashDB scene
+  // has already been downloaded.
+  stashUrl: "",
+  stashApiKey: ""
 };
+
+// The stash-box endpoint URL StashApp records on scenes it scraped from
+// StashDB — matches the "Stash-boxes" entry a Stash user would configure to
+// scrape StashDB.
+const STASHDB_ENDPOINT = "https://stashdb.org/graphql";
 
 async function getConfig() {
   const cfg = await browser.storage.local.get(DEFAULTS);
@@ -75,6 +84,96 @@ async function testConnection() {
   return { version: status && status.version };
 }
 
+/* ------------------------------------------------------------------ *
+ * StashApp: check whether a StashDB scene is already downloaded       *
+ * ------------------------------------------------------------------ */
+
+async function stashFetch(query, variables) {
+  const cfg = await getConfig();
+  const base = normalizeBase(cfg.stashUrl);
+  if (!base) throw new Error("Stash URL is not configured. Open the extension options.");
+
+  const res = await fetch(base + "/graphql", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(cfg.stashApiKey ? { "ApiKey": cfg.stashApiKey } : {})
+    },
+    body: JSON.stringify({ query, variables })
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Stash request failed: ${res.status} ${res.statusText}${text ? " – " + text.slice(0, 300) : ""}`);
+  }
+  const json = text ? JSON.parse(text) : null;
+  if (json && json.errors && json.errors.length) {
+    throw new Error(json.errors[0].message);
+  }
+  return json && json.data;
+}
+
+// StashApp has used `stash_id_endpoint` (endpoint + stash_id) to filter
+// scenes by stash-box ID for a while; older instances only understand the
+// plain `stash_id` filter. Try the modern shape first and fall back.
+async function findSceneByStashId(stashId) {
+  const modernQuery = `query FindByStashId($endpoint: String!, $stashId: String!) {
+    findScenes(scene_filter: { stash_id_endpoint: { endpoint: $endpoint, stash_id: $stashId, modifier: EQUALS } }, filter: { per_page: 1 }) {
+      scenes { id title files { height width } }
+    }
+  }`;
+  const legacyQuery = `query FindByStashId($stashId: String!) {
+    findScenes(scene_filter: { stash_id: { value: $stashId, modifier: EQUALS } }, filter: { per_page: 1 }) {
+      scenes { id title files { height width } }
+    }
+  }`;
+
+  let data;
+  try {
+    data = await stashFetch(modernQuery, { endpoint: STASHDB_ENDPOINT, stashId });
+  } catch (e) {
+    data = await stashFetch(legacyQuery, { stashId });
+  }
+  return data && data.findScenes && data.findScenes.scenes && data.findScenes.scenes[0];
+}
+
+function sceneHeight(scene) {
+  const heights = (scene.files || [])
+    .map((f) => f.height)
+    .filter((h) => typeof h === "number" && h > 0);
+  return heights.length ? Math.max(...heights) : null;
+}
+
+function heightLabel(height) {
+  if (!height) return "unknown resolution";
+  if (height >= 2000) return "2160p";
+  if (height >= 1000) return "1080p";
+  if (height >= 700) return "720p";
+  return `${height}p`;
+}
+
+async function checkStashScene(stashId) {
+  const cfg = await getConfig();
+  const base = normalizeBase(cfg.stashUrl);
+  if (!base) return null; // Stash not configured — nothing to check.
+
+  const scene = await findSceneByStashId(stashId);
+  if (!scene) return null;
+
+  return {
+    id: scene.id,
+    title: scene.title,
+    resolution: heightLabel(sceneHeight(scene)),
+    url: `${base}/scenes/${scene.id}`
+  };
+}
+
+async function testStashConnection() {
+  const data = await stashFetch(`query { version { version } }`, {});
+  return { version: data && data.version && data.version.version };
+}
+
 browser.runtime.onMessage.addListener((msg) => {
   switch (msg && msg.type) {
     case "search":
@@ -89,6 +188,16 @@ browser.runtime.onMessage.addListener((msg) => {
       );
     case "test":
       return testConnection().then(
+        (info) => ({ ok: true, info }),
+        (err) => ({ ok: false, error: err.message })
+      );
+    case "checkStash":
+      return checkStashScene(msg.stashId).then(
+        (scene) => ({ ok: true, scene }),
+        (err) => ({ ok: false, error: err.message })
+      );
+    case "testStash":
+      return testStashConnection().then(
         (info) => ({ ok: true, info }),
         (err) => ({ ok: false, error: err.message })
       );
