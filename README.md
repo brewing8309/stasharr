@@ -9,15 +9,25 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
 - Reads studio + performers + date via StashDB's GraphQL API (using your
   logged-in session)
 - "Female" = performers with gender `FEMALE` or `TRANSGENDER_FEMALE`.
-- Searches Prowlarr using up to 5 progressively looser queries, stopping at
-  the first one that gets a hit:
-  1. `StudioNameNoSpaces performer1 performer2 … YY.MM.DD`
-  2. `StudioNameNoSpaces performer1 performer2 …`
-  3. `performer1 performer2 … YY.MM.DD`
-  4. `Scene Title YY.MM.DD`
-  5. `Scene Title`
-  Each step that runs after the first shows a small notice in the panel that
-  the search was expanded.
+- Searches Prowlarr using up to 10 progressively looser queries, stopping at
+  the first one that gets a hit (a step is skipped automatically if there's
+  nothing to search, or if it would repeat an already-tried query — e.g. a
+  performer has no alias, or the studio has no parent brand):
+  1. Studio + performers + date
+  2. Studio + performer aliases + date
+  3. Parent studio + performers + date
+  4. Studio + performers
+  5. Studio + performer aliases
+  6. Parent studio + performers
+  7. Performers + date
+  8. Performer aliases + date
+  9. Scene title + date
+  10. Scene title
+
+  Dates are formatted `YY.MM.DD`; scene titles have parenthetical asides and
+  punctuation stripped before being used as a search term. Each step that
+  runs after the first shows a small notice in the panel that the search was
+  expanded.
 - The results panel has a **🍆 Try Harder** button to manually run the next
   step in that list at any time, whether or not the current step had hits.
 - Prowlarr search restricted to XXX category `6000` by default (configurable).

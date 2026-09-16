@@ -6,12 +6,14 @@
  * DOM fallback), searches Prowlarr, and renders resolution-sorted results
  * with a per-release download button.
  *
- * There are 5 progressively looser search steps (studio+performers+date,
- * studio+performers, performers+date, title+date, title). They run in order,
- * automatically moving to the next step whenever one comes back empty, and
- * stop at the first step with a hit — showing a small notice each time the
- * search is auto-expanded. A "Try Harder" button in the results panel lets
- * you manually advance to the next step at any time, hit or not.
+ * There are up to 10 progressively looser search steps, covering studio,
+ * parent studio, performers, performer aliases, date and title in various
+ * combinations (see QUERY_STEPS). They run in order, automatically moving to
+ * the next step whenever one comes back empty or would repeat an already-
+ * tried query (e.g. no aliases/parent studio), and stop at the first step
+ * with a hit — showing a small notice each time the search is auto-expanded.
+ * A "Try Harder" button in the results panel lets you manually advance to
+ * the next step at any time, hit or not.
  *
  * If a StashApp instance is configured, it also checks (via the background
  * script) whether the scene is already in that library and shows a badge
@@ -74,8 +76,8 @@ async function fetchSceneViaGraphQL(sceneId) {
     findScene(id: $id) {
       title
       date
-      studio { name }
-      performers { performer { name gender } }
+      studio { name parent { name } }
+      performers { performer { name gender aliases } }
     }
   }`;
   const url = new URL("/graphql", location.origin).href;
@@ -92,11 +94,15 @@ async function fetchSceneViaGraphQL(sceneId) {
   if (!scene) throw new Error("Scene not found");
 
   const studio = scene.studio ? scene.studio.name : "";
-  const females = (scene.performers || [])
+  const parentStudio = scene.studio && scene.studio.parent ? scene.studio.parent.name : "";
+  const femalePerformers = (scene.performers || [])
     .map((p) => p.performer)
-    .filter((p) => p && FEMALE_GENDERS.has(p.gender))
-    .map((p) => p.name);
-  return { studio, females, title: scene.title, date: scene.date || "" };
+    .filter((p) => p && FEMALE_GENDERS.has(p.gender));
+  const females = femalePerformers.map((p) => p.name);
+  // One alias per performer (their first listed one) is enough to give the
+  // search cascade an alternate name to try — not every alias.
+  const femaleAliasNames = femalePerformers.map((p) => (p.aliases && p.aliases[0]) || p.name);
+  return { studio, parentStudio, females, femaleAliasNames, title: scene.title, date: scene.date || "" };
 }
 
 // DOM fallback: parse the rendered scene page. StashDB renders each performer
@@ -139,7 +145,10 @@ function fetchSceneViaDOM() {
     const name = (nameEl ? nameEl.textContent : a.textContent).trim();
     if (name && !females.includes(name)) females.push(name);
   });
-  return { studio, females, title: document.title, date: extractDateFromDOM() };
+  // No aliases or parent studio available from the rendered page — the
+  // alias/parent search steps will just no-op (identical to the primary
+  // studio/name steps) rather than add anything here.
+  return { studio, parentStudio: "", females, femaleAliasNames: females.slice(), title: document.title, date: extractDateFromDOM() };
 }
 
 async function resolveScene(sceneId) {
@@ -204,8 +213,28 @@ function studioTerm(scene) {
   return (scene.studio || "").replace(/\s+/g, "");
 }
 
+function parentStudioTerm(scene) {
+  return (scene.parentStudio || "").replace(/\s+/g, "");
+}
+
+function femaleAliasTerms(scene) {
+  return scene.femaleAliasNames || scene.females;
+}
+
+// Strips parenthetical asides ("(Part 2)") and punctuation from a scene
+// title before it's used as a search term — most Torznab searches treat the
+// query as required tokens, so stray punctuation/asides just narrow the
+// search for no benefit. Scoring isn't affected: it already normalizes.
+function cleanTitle(title) {
+  return String(title || "")
+    .replace(/[([{][^)\]}]*[)\]}]/g, " ")
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function titleTerm(scene) {
-  return (scene.title || "").trim();
+  return cleanTitle(scene.title);
 }
 
 function joinTerms(terms) {
@@ -214,19 +243,47 @@ function joinTerms(terms) {
 
 // Search steps, tried in order until one returns at least one hit. Not
 // every indexer names releases by studio, so later steps drop it in favor
-// of the scene date and, eventually, just the scene title.
+// of the scene date and, eventually, just the scene title. Alias/parent
+// steps are only useful when a performer has an alias or the studio has a
+// parent brand — when they don't, advanceSearch's dedup skips the step
+// automatically since it'd build an identical query to one already tried.
 const QUERY_STEPS = [
   {
     label: "studio + performers + date",
     build: (scene) => joinTerms([studioTerm(scene), ...scene.females, formatDateYYMMDD(scene.date)])
   },
   {
+    label: "studio + performer aliases + date",
+    build: (scene) => joinTerms([studioTerm(scene), ...femaleAliasTerms(scene), formatDateYYMMDD(scene.date)])
+  },
+  {
+    label: "parent studio + performers + date",
+    // Guarded explicitly (not just left to joinTerms) so a missing parent
+    // studio skips this step for the right reason, instead of silently
+    // becoming a plain "performers + date" query mislabeled as this step.
+    build: (scene) => parentStudioTerm(scene)
+      ? joinTerms([parentStudioTerm(scene), ...scene.females, formatDateYYMMDD(scene.date)])
+      : ""
+  },
+  {
     label: "studio + performers",
     build: (scene) => joinTerms([studioTerm(scene), ...scene.females])
   },
   {
+    label: "studio + performer aliases",
+    build: (scene) => joinTerms([studioTerm(scene), ...femaleAliasTerms(scene)])
+  },
+  {
+    label: "parent studio + performers",
+    build: (scene) => parentStudioTerm(scene) ? joinTerms([parentStudioTerm(scene), ...scene.females]) : ""
+  },
+  {
     label: "performers + date",
     build: (scene) => joinTerms([...scene.females, formatDateYYMMDD(scene.date)])
+  },
+  {
+    label: "performer aliases + date",
+    build: (scene) => joinTerms([...femaleAliasTerms(scene), formatDateYYMMDD(scene.date)])
   },
   {
     label: "title + date",
@@ -267,9 +324,15 @@ function scoreRelease(release, scene) {
   let score = 0;
 
   if (scene.studio && hay.includes(normalizeForMatch(scene.studio))) score++;
-  for (const name of scene.females || []) {
-    if (name && hay.includes(normalizeForMatch(name))) score++;
-  }
+
+  const aliasNames = scene.femaleAliasNames || [];
+  (scene.females || []).forEach((name, i) => {
+    const alias = aliasNames[i];
+    const matched = (name && hay.includes(normalizeForMatch(name))) ||
+      (alias && alias !== name && hay.includes(normalizeForMatch(alias)));
+    if (matched) score++;
+  });
+
   if (scene.title && hay.includes(normalizeForMatch(scene.title))) score++;
 
   const iso = String(scene.date || "").match(/(\d{4})-(\d{2})-(\d{2})/);
@@ -479,11 +542,14 @@ async function advanceSearch(panel, { auto }) {
   while (stepIndex < QUERY_STEPS.length) {
     const step = QUERY_STEPS[stepIndex];
     const query = step.build(state.scene);
-    if (!query) {
-      // Nothing to search for at this step (e.g. no title) — skip it.
+    if (!query || state.triedQueries.has(query)) {
+      // Nothing to search for at this step (e.g. no title), or it's
+      // identical to a query already tried (e.g. no aliases/parent studio,
+      // so the alias/parent step would just repeat an earlier one) — skip.
       stepIndex++;
       continue;
     }
+    state.triedQueries.add(query);
 
     if (auto && executedCount > 0) {
       showNotice(panel, `No hits yet — search expanded to ${step.label}.`);
@@ -516,7 +582,7 @@ async function onSearchClick() {
   const scene = await resolveSceneForPanel(panel);
   if (!scene) return;
 
-  panel._sdpState = { scene, stepIndex: -1 };
+  panel._sdpState = { scene, stepIndex: -1, triedQueries: new Set() };
   await advanceSearch(panel, { auto: true });
 }
 
