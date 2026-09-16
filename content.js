@@ -6,11 +6,12 @@
  * DOM fallback), searches Prowlarr, and renders resolution-sorted results
  * with a per-release download button.
  *
- * If the studio+performers search comes back empty, it automatically retries
- * with just the female performers + scene date (no studio) — some releases
- * are tagged by date instead of by studio name — and shows a small notice
- * that the search was expanded. The results panel also has its own button to
- * run that alternate search directly at any time.
+ * There are 5 progressively looser search steps (studio+performers+date,
+ * studio+performers, performers+date, title+date, title). They run in order,
+ * automatically moving to the next step whenever one comes back empty, and
+ * stop at the first step with a hit — showing a small notice each time the
+ * search is auto-expanded. A "Try Harder" button in the results panel lets
+ * you manually advance to the next step at any time, hit or not.
  */
 
 const SCENE_RE = /^\/scenes\/([0-9a-f-]{36})/i;
@@ -140,11 +141,6 @@ async function resolveScene(sceneId) {
   return fetchSceneViaDOM();
 }
 
-function buildQuery(scene) {
-  const studio = (scene.studio || "").replace(/\s+/g, "");
-  return [studio, ...scene.females].filter(Boolean).join(" ").trim();
-}
-
 // Some releases are named by date instead of studio, e.g. "26.09.10" for
 // 2026-09-10. StashDB dates come as "YYYY-MM-DD"; take the last two digits
 // of the year to match that convention.
@@ -153,12 +149,43 @@ function formatDateYYMMDD(dateStr) {
   return m ? `${m[1].slice(2)}.${m[2]}.${m[3]}` : "";
 }
 
-// Fallback query used when the studio+performers search finds nothing:
-// female performers + scene date, without the studio.
-function buildAltQuery(scene) {
-  const date = formatDateYYMMDD(scene.date);
-  return [...scene.females, date].filter(Boolean).join(" ").trim();
+function studioTerm(scene) {
+  return (scene.studio || "").replace(/\s+/g, "");
 }
+
+function titleTerm(scene) {
+  return (scene.title || "").trim();
+}
+
+function joinTerms(terms) {
+  return terms.filter(Boolean).join(" ").trim();
+}
+
+// Search steps, tried in order until one returns at least one hit. Not
+// every indexer names releases by studio, so later steps drop it in favor
+// of the scene date and, eventually, just the scene title.
+const QUERY_STEPS = [
+  {
+    label: "studio + performers + date",
+    build: (scene) => joinTerms([studioTerm(scene), ...scene.females, formatDateYYMMDD(scene.date)])
+  },
+  {
+    label: "studio + performers",
+    build: (scene) => joinTerms([studioTerm(scene), ...scene.females])
+  },
+  {
+    label: "performers + date",
+    build: (scene) => joinTerms([...scene.females, formatDateYYMMDD(scene.date)])
+  },
+  {
+    label: "title + date",
+    build: (scene) => joinTerms([titleTerm(scene), formatDateYYMMDD(scene.date)])
+  },
+  {
+    label: "title",
+    build: (scene) => joinTerms([titleTerm(scene)])
+  }
+];
 
 /* ------------------------------------------------------------------ *
  * Results sorting                                                     *
@@ -176,7 +203,34 @@ function resolutionOf(release) {
   return m ? m[1].toLowerCase() + "p" : "other";
 }
 
-function sortResults(results) {
+function normalizeForMatch(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+// Counts how many of the scene's search criteria (studio, each female
+// performer, title, date) show up in the release's title, so releases
+// matching more of what we know about the scene sort first within a
+// resolution group.
+function scoreRelease(release, scene) {
+  const hay = normalizeForMatch(`${release.title || ""} ${release.sortTitle || ""}`);
+  let score = 0;
+
+  if (scene.studio && hay.includes(normalizeForMatch(scene.studio))) score++;
+  for (const name of scene.females || []) {
+    if (name && hay.includes(normalizeForMatch(name))) score++;
+  }
+  if (scene.title && hay.includes(normalizeForMatch(scene.title))) score++;
+
+  const iso = String(scene.date || "").match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const [, yyyy, mm, dd] = iso;
+    if (hay.includes(`${yyyy}${mm}${dd}`) || hay.includes(`${yyyy.slice(2)}${mm}${dd}`)) score++;
+  }
+
+  return score;
+}
+
+function sortResults(results, scene) {
   const rank = (r) => {
     const idx = RES_ORDER.indexOf(resolutionOf(r));
     return idx === -1 ? RES_ORDER.length : idx;
@@ -184,7 +238,10 @@ function sortResults(results) {
   return results.slice().sort((a, b) => {
     const ra = rank(a), rb = rank(b);
     if (ra !== rb) return ra - rb;
-    // Within the same resolution bucket, prefer more seeders/grabs.
+    // Within the same resolution bucket, prefer releases matching more of
+    // the scene's search criteria, then more seeders/grabs.
+    const sa = scoreRelease(a, scene), sb = scoreRelease(b, scene);
+    if (sa !== sb) return sb - sa;
     return (b.seeders ?? b.grabs ?? 0) - (a.seeders ?? a.grabs ?? 0);
   });
 }
@@ -211,12 +268,18 @@ function ensurePanel() {
     <div class="sdp-notice" hidden></div>
     <div class="sdp-body"></div>
     <div class="sdp-panel-foot">
-      <button type="button" class="sdp-alt-btn">⬇ Search by performers + date</button>
+      <button type="button" class="sdp-try-harder" hidden>🍆 Try Harder</button>
     </div>`;
   panel.querySelector(".sdp-close").addEventListener("click", closePanel);
-  panel.querySelector(".sdp-alt-btn").addEventListener("click", onAltSearchClick);
+  panel.querySelector(".sdp-try-harder").addEventListener("click", onTryHarderClick);
   document.body.appendChild(panel);
   return panel;
+}
+
+function updateTryHarderButton(panel) {
+  const btn = panel.querySelector(".sdp-try-harder");
+  const state = panel._sdpState;
+  btn.hidden = !state || state.stepIndex >= QUERY_STEPS.length - 1;
 }
 
 function showNotice(panel, text) {
@@ -237,7 +300,7 @@ function fmtSize(bytes) {
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
-function renderResults(panel, query, results) {
+function renderResults(panel, query, results, scene) {
   panel.querySelector(".sdp-query").textContent = `Query: ${query}`;
   const body = panel.querySelector(".sdp-body");
   body.innerHTML = "";
@@ -247,7 +310,7 @@ function renderResults(panel, query, results) {
     return;
   }
 
-  const sorted = sortResults(results);
+  const sorted = sortResults(results, scene);
   let lastRes = null;
   for (const r of sorted) {
     const res = resolutionOf(r);
@@ -352,39 +415,62 @@ async function resolveSceneForPanel(panel) {
   }
 }
 
+// Runs QUERY_STEPS starting after the panel's current step. In auto mode
+// (the initial search) it keeps advancing past empty results until a step
+// gets a hit or the steps run out; in manual mode (the "Try Harder" button)
+// it runs exactly one step and renders whatever comes back, even if empty.
+async function advanceSearch(panel, { auto }) {
+  const state = panel._sdpState;
+  if (!state) return;
+
+  let stepIndex = state.stepIndex + 1;
+  let executedCount = 0;
+  while (stepIndex < QUERY_STEPS.length) {
+    const step = QUERY_STEPS[stepIndex];
+    const query = step.build(state.scene);
+    if (!query) {
+      // Nothing to search for at this step (e.g. no title) — skip it.
+      stepIndex++;
+      continue;
+    }
+
+    if (auto && executedCount > 0) {
+      showNotice(panel, `No hits yet — search expanded to ${step.label}.`);
+    } else {
+      hideNotice(panel);
+    }
+
+    const results = await doSearch(panel, query, `No usable "${step.label}" search terms for this scene.`);
+    state.stepIndex = stepIndex;
+    executedCount++;
+    updateTryHarderButton(panel);
+    if (results === null) return;
+
+    if (!auto || results.length > 0) {
+      renderResults(panel, query, results, state.scene);
+      return;
+    }
+    stepIndex++;
+  }
+
+  state.stepIndex = QUERY_STEPS.length;
+  updateTryHarderButton(panel);
+  if (auto) {
+    panel.querySelector(".sdp-body").innerHTML = `<div class="sdp-empty">No releases found with any search.</div>`;
+  }
+}
+
 async function onSearchClick() {
   const panel = ensurePanel();
   const scene = await resolveSceneForPanel(panel);
   if (!scene) return;
 
-  const query = buildQuery(scene);
-  let results = await doSearch(panel, query, "No studio or female performers found for this scene.");
-  if (results === null) return;
-
-  if (results.length === 0) {
-    const altQuery = buildAltQuery(scene);
-    if (altQuery) {
-      const altResults = await doSearch(panel, altQuery, "No female performers or date found for this scene.");
-      if (altResults === null) return;
-      showNotice(panel, "No hits for studio + performers — search expanded to performers + date.");
-      renderResults(panel, altQuery, altResults);
-      return;
-    }
-  }
-
-  renderResults(panel, query, results);
+  panel._sdpState = { scene, stepIndex: -1 };
+  await advanceSearch(panel, { auto: true });
 }
 
-async function onAltSearchClick() {
+async function onTryHarderClick() {
   const panel = document.getElementById("sdp-panel");
-  if (!panel) return;
-  hideNotice(panel);
-
-  const scene = await resolveSceneForPanel(panel);
-  if (!scene) return;
-
-  const query = buildAltQuery(scene);
-  const results = await doSearch(panel, query, "No female performers or date found for this scene.");
-  if (results === null) return;
-  renderResults(panel, query, results);
+  if (!panel || !panel._sdpState) return;
+  await advanceSearch(panel, { auto: false });
 }

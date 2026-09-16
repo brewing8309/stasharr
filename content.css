@@ -119,14 +119,15 @@
   padding: 8px 12px;
   border-top: 1px solid #2a2e37;
 }
-.sdp-alt-btn {
+.sdp-try-harder {
   width: 100%;
   padding: 8px 12px;
   font: 600 12px system-ui, sans-serif;
   color: #fff;
-  background: #2f6fd0;
+  background: #8a3fc9;
   border: none;
   border-radius: 6px;
   cursor: pointer;
 }
-.sdp-alt-btn:hover { background: #3a7ee0; }
+.sdp-try-harder:hover { background: #9a52d8; }
+.sdp-try-harder[hidden] { display: none; }
