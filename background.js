@@ -200,6 +200,118 @@ async function testStashConnection() {
   return { version: data && data.version && data.version.version };
 }
 
+/* ------------------------------------------------------------------ *
+ * "Search StashDB for selection": right-click a text selection on any   *
+ * page to find the matching StashDB scene, shown in a small picker      *
+ * panel injected into that page (see picker.js). Unlike the Prowlarr/   *
+ * Stash proxying above, this always talks to the fixed stash-box        *
+ * endpoint, not a user-configured URL.                                  *
+ * ------------------------------------------------------------------ */
+
+async function stashdbFetch(query, variables) {
+  const res = await fetchWithTimeout(STASHDB_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ query, variables })
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`StashDB request failed: ${res.status} ${res.statusText}${text ? " – " + text.slice(0, 300) : ""}`);
+  }
+  const json = text ? JSON.parse(text) : null;
+  if (json && json.errors && json.errors.length) {
+    throw new Error(json.errors[0].message);
+  }
+  return json && json.data;
+}
+
+const SEARCH_SCENES_QUERY = `query SearchScenes($term: String!) {
+  searchScenes(term: $term, limit: 8) {
+    id
+    title
+    release_date
+    studio { name }
+    performers { performer { name } }
+    images { url }
+  }
+}`;
+
+async function searchStashDBScenes(term) {
+  const data = await stashdbFetch(SEARCH_SCENES_QUERY, { term });
+  const scenes = (data && data.searchScenes) || [];
+  return scenes.map((s) => ({
+    id: s.id,
+    title: s.title || "",
+    date: s.release_date || "",
+    studio: s.studio ? s.studio.name : "",
+    performers: (s.performers || []).map((p) => p.performer && p.performer.name).filter(Boolean),
+    image: s.images && s.images[0] ? s.images[0].url : null
+  }));
+}
+
+// Selected text on an arbitrary page can be a torrent-style filename
+// ("Studio.Performer.Name.26.09.10.XXX.1080p.mp4"), a loosely structured
+// line ("[Studio] Performer - Scene Title"), or just plain free text with
+// no structure at all. Rather than trying to parse any of these into
+// separate studio/performer/title fields (fragile across formats), this
+// just normalizes everything into a flat, punctuation-free search phrase
+// and lets StashDB's own fuzzy search rank it.
+const SELECTION_NOISE_RE = /\b(1080p|720p|2160p|4k|uhd|hd|sd|x264|x265|h264|h265|hevc|avc|xvid|web ?dl|webrip|hdtv|dvdrip|bluray|brrip|xxx|nfo|proof|repack|internal|multisub|complete)\b/gi;
+
+function cleanSelectionText(text) {
+  return String(text || "")
+    .slice(0, 200)
+    // File extension, if this is actually a filename.
+    .replace(/\.(mp4|mkv|avi|wmv|mov|m4v|ts|m2ts|flv)$/i, "")
+    // Dots/underscores/hyphens/brackets/pipes are all used as separators
+    // across these formats — normalize them all to spaces instead of
+    // guessing which punctuation style is "real". This has to run before
+    // the noise-token strip below so a hyphen-glued release-group tag
+    // (e.g. "x264-GROUP") splits into separate words first, rather than
+    // leaving a dangling "-GROUP" once "x264" alone is stripped out.
+    .replace(/[-._|[\](){}]+/g, " ")
+    .replace(SELECTION_NOISE_RE, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function handleSelectionSearch(rawText, tabId) {
+  const term = cleanSelectionText(rawText);
+  let payload;
+  if (!term) {
+    payload = { raw: rawText, term, error: "Nothing searchable in the selected text." };
+  } else {
+    try {
+      payload = { raw: rawText, term, matches: await searchStashDBScenes(term) };
+    } catch (e) {
+      payload = { raw: rawText, term, error: e.message };
+    }
+  }
+
+  try {
+    await browser.tabs.insertCSS(tabId, { file: "content.css" });
+    await browser.tabs.executeScript(tabId, { file: "picker.js" });
+    await browser.tabs.sendMessage(tabId, { type: "sdpShowCandidates", ...payload });
+  } catch (e) {
+    // Restricted pages (about:, addons.mozilla.org, ...) can't be injected
+    // into — nothing sensible to show the user there anyway.
+    console.warn("[StashDB→Prowlarr] Could not show picker panel:", e.message);
+  }
+}
+
+browser.contextMenus.create({
+  id: "sdp-search-selection",
+  title: 'Search StashDB for "%s"',
+  contexts: ["selection"]
+});
+
+browser.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === "sdp-search-selection" && tab && tab.id != null) {
+    handleSelectionSearch(info.selectionText, tab.id);
+  }
+});
+
 browser.runtime.onMessage.addListener((msg) => {
   switch (msg && msg.type) {
     case "search":

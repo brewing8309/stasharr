@@ -78,6 +78,18 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
   scene was scraped from StashDB. If found, a small badge appears above the
   **⬇ Search Prowlarr** button showing its resolution, linking straight to
   the scene in your Stash instance.
+- **Search StashDB for a text selection**, anywhere in the browser: select
+  some text on any page (a torrent filename, a forum post like `[Studio]
+  Performer - Scene Title`, or just a plain title) and right-click →
+  **Search StashDB for "…"**. This normalizes the selection into a plain
+  search phrase (stripping file extensions, quality/codec tags like
+  `1080p`/`x264`, and separators like dots/underscores/brackets — no
+  assumption about which of these formats it actually is) and queries
+  StashDB's own scene search. A small floating panel then lists the
+  matching scenes, each with its StashDB thumbnail, title, studio, date and
+  performers; clicking one opens that scene on stashdb.org in a new tab,
+  where the normal **⬇ Search Prowlarr** button takes over. This is a pure
+  finder/confirmation step — it doesn't touch Prowlarr itself.
 
 ## Setup
 
@@ -112,3 +124,7 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
 - The **⬇ Search Prowlarr** and **🍆 Try Harder** buttons disable themselves
   while a search is running, so clicking again mid-search can't start a
   second, overlapping one.
+- The right-click "Search StashDB for selection" feature also needs you to
+  be logged into stashdb.org (it uses that GraphQL API directly, not
+  Prowlarr/Stash), and won't work on pages the extension can't inject into
+  (e.g. `about:` pages or addons.mozilla.org).

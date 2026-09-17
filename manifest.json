@@ -9,6 +9,7 @@
   },
   "permissions": [
     "storage",
+    "contextMenus",
     "<all_urls>"
   ],
   "content_scripts": [
