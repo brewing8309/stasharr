@@ -226,20 +226,24 @@ async function stashdbFetch(query, variables) {
   return json && json.data;
 }
 
+// searchScenes returns a QueryScenesResultType wrapper ({ count, scenes }),
+// not a bare scene list — only the deprecated searchScene does that.
 const SEARCH_SCENES_QUERY = `query SearchScenes($term: String!) {
   searchScenes(term: $term, limit: 8) {
-    id
-    title
-    release_date
-    studio { name }
-    performers { performer { name } }
-    images { url }
+    scenes {
+      id
+      title
+      release_date
+      studio { name }
+      performers { performer { name } }
+      images { url }
+    }
   }
 }`;
 
 async function searchStashDBScenes(term) {
   const data = await stashdbFetch(SEARCH_SCENES_QUERY, { term });
-  const scenes = (data && data.searchScenes) || [];
+  const scenes = (data && data.searchScenes && data.searchScenes.scenes) || [];
   return scenes.map((s) => ({
     id: s.id,
     title: s.title || "",
