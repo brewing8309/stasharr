@@ -24,11 +24,14 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
   Dates are formatted `YY.MM.DD`; scene titles have parenthetical asides and
   punctuation stripped before being used as a search term. A collapsible
   **Details** section above the results shows the scene data behind the
-  search and one block per query, listed one below another — each showing a
-  spinner while that query is still running, then that query's own
-  (unfiltered) results live as soon as it comes back, in the same style as
-  the main list below. Once everything has settled, a summary line shows how
-  many results came back in total and how many passed the criteria filter.
+  search and one collapsible block per query, listed one below another. Each
+  block's summary line always shows the query and its live status (searching…
+  / failed / N results); expanding it shows a spinner while that query is
+  still running, then that query's own (unfiltered) results in the same
+  style as the main list below. Collapsing a query block manually keeps it
+  collapsed even as other queries finish and refresh the section. Once
+  everything has settled, a summary line shows how many results came back in
+  total and how many passed the criteria filter.
 - The results panel has a **🍆 Try Harder** button to manually search 5
   narrower fallback combinations one at a time (performer aliases and
   parent studio in place of the studio/performer names above, plus their
@@ -75,3 +78,8 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
 
 - If GraphQL extraction fails (e.g. not logged in), it falls back to reading the
   rendered page; make sure you're logged into StashDB for best results.
+- Prowlarr/Stash requests time out after 20s instead of hanging indefinitely
+  on a dead indexer or an unreachable instance.
+- The **⬇ Search Prowlarr** and **🍆 Try Harder** buttons disable themselves
+  while a search is running, so clicking again mid-search can't start a
+  second, overlapping one.

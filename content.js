@@ -442,11 +442,15 @@ function ensurePanel() {
 }
 
 // Fills the collapsible "Details" section: the scene data behind the
-// search, then one block per query — a spinner while it's still running, an
-// error message if it failed, or its own (unfiltered) results in the same
-// row style as the main list once it's done. `queryStates` is an array of
-// { query, status: "pending" | "done" | "error", results?, error? }, so
-// callers can re-render this as each query resolves for a live view. Once
+// search, then one collapsible block per query — its summary line always
+// shows the query text plus a live status (searching…/failed/N results),
+// and expanding it reveals a spinner while running, an error message if it
+// failed, or its own (unfiltered) results in the same row style as the main
+// list once it's done. `queryStates` is an array of { query, status:
+// "pending" | "done" | "error", results?, error?, open? }, so callers can
+// re-render this as each query resolves for a live view — `open` (default
+// true) is read back from the previous state by callers so a query block
+// the user manually collapsed stays collapsed across those re-renders. Once
 // everything is known, `counts` adds the aggregate "found / passed filter"
 // line for the merged, MIN_SCORE-filtered list shown at the bottom.
 function renderDetails(panel, scene, queryStates, counts) {
@@ -477,35 +481,42 @@ function renderDetails(panel, scene, queryStates, counts) {
   }
 
   for (const qs of queryStates) {
-    const block = document.createElement("div");
+    const block = document.createElement("details");
     block.className = "sdp-details-query";
+    block.open = qs.open !== false;
+    block.addEventListener("toggle", () => { qs.open = block.open; });
 
-    const label = document.createElement("div");
-    label.className = "sdp-details-query-label";
-    label.textContent = qs.query;
-    block.appendChild(label);
+    const summary = document.createElement("summary");
+    summary.className = "sdp-details-query-label";
+    let status;
+    if (qs.status === "pending") status = "searching…";
+    else if (qs.status === "error") status = "failed";
+    else status = `${qs.results.length} result${qs.results.length === 1 ? "" : "s"}`;
+    summary.textContent = `${qs.query} — ${status}`;
+    block.appendChild(summary);
+
+    const content = document.createElement("div");
+    content.className = "sdp-details-query-body";
 
     if (qs.status === "pending") {
-      const loading = document.createElement("div");
-      loading.className = "sdp-loading sdp-loading-inline";
-      loading.innerHTML = `<span class="sdp-spinner" role="status" aria-label="Searching…"></span>`;
-      block.appendChild(loading);
+      content.innerHTML = `<div class="sdp-loading sdp-loading-inline"><span class="sdp-spinner" role="status" aria-label="Searching…"></span></div>`;
     } else if (qs.status === "error") {
       const err = document.createElement("div");
       err.className = "sdp-empty";
       err.textContent = `Failed: ${qs.error}`;
-      block.appendChild(err);
+      content.appendChild(err);
     } else if (!qs.results.length) {
       const empty = document.createElement("div");
       empty.className = "sdp-empty";
       empty.textContent = "No releases found.";
-      block.appendChild(empty);
+      content.appendChild(empty);
     } else {
       for (const r of sortResults(qs.results, scene)) {
-        block.appendChild(buildResultRow(r, scene));
+        content.appendChild(buildResultRow(r, scene));
       }
     }
 
+    block.appendChild(content);
     body.appendChild(block);
   }
 
@@ -687,15 +698,19 @@ async function runBroadSearch(panel, scene, queries) {
     return;
   }
 
-  const queryStates = queries.map((query) => ({ query, status: "pending" }));
+  const queryStates = queries.map((query) => ({ query, status: "pending", open: true }));
   renderDetails(panel, scene, queryStates);
   body.innerHTML = LOADING_HTML;
 
   await Promise.all(queries.map((query, i) =>
     prowlarrSearch(query).then((outcome) => {
+      // Carry over whatever the user set `open` to, so a query block they
+      // collapsed manually doesn't pop back open just because another query
+      // elsewhere finished and triggered a re-render.
+      const open = queryStates[i].open;
       queryStates[i] = outcome.ok
-        ? { query, status: "done", results: outcome.results }
-        : { query, status: "error", error: outcome.error };
+        ? { query, status: "done", results: outcome.results, open }
+        : { query, status: "error", error: outcome.error, open };
       renderDetails(panel, scene, queryStates);
     })
   ));
@@ -750,20 +765,36 @@ async function advanceSearch(panel) {
   updateTryHarderButton(panel);
 }
 
+// Guards against a double-click starting a second, overlapping search: a
+// disabled button doesn't dispatch click events, so this alone is enough —
+// no separate busy flag needed. Re-enables in `finally` even if something
+// above throws, so a failure never leaves the button stuck.
 async function onSearchClick() {
-  const panel = ensurePanel();
-  const scene = await resolveSceneForPanel(panel);
-  if (!scene) return;
+  const btn = document.getElementById("sdp-button");
+  btn.disabled = true;
+  try {
+    const panel = ensurePanel();
+    const scene = await resolveSceneForPanel(panel);
+    if (!scene) return;
 
-  const broadQueries = [...new Set(BROAD_QUERIES.map((q) => q.build(scene)).filter(Boolean))];
-  panel._sdpState = { scene, stepIndex: -1, triedQueries: new Set(broadQueries) };
+    const broadQueries = [...new Set(BROAD_QUERIES.map((q) => q.build(scene)).filter(Boolean))];
+    panel._sdpState = { scene, stepIndex: -1, triedQueries: new Set(broadQueries) };
 
-  await runBroadSearch(panel, scene, broadQueries);
-  updateTryHarderButton(panel);
+    await runBroadSearch(panel, scene, broadQueries);
+    updateTryHarderButton(panel);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function onTryHarderClick() {
   const panel = document.getElementById("sdp-panel");
   if (!panel || !panel._sdpState) return;
-  await advanceSearch(panel);
+  const btn = panel.querySelector(".sdp-try-harder");
+  btn.disabled = true;
+  try {
+    await advanceSearch(panel);
+  } finally {
+    btn.disabled = false;
+  }
 }

@@ -32,13 +32,33 @@ function normalizeBase(url) {
   return (url || "").trim().replace(/\/+$/, "");
 }
 
+// Prowlarr/Stash requests can otherwise hang indefinitely on a dead
+// indexer or an unreachable instance, leaving the caller (and, in the
+// content script, a spinner) stuck forever.
+const REQUEST_TIMEOUT_MS = 20000;
+
+async function fetchWithTimeout(url, options) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (e) {
+    if (e.name === "AbortError") {
+      throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${url}`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function prowlarrFetch(path, { method = "GET", body = null } = {}) {
   const cfg = await getConfig();
   const base = normalizeBase(cfg.prowlarrUrl);
   if (!base) throw new Error("Prowlarr URL is not configured. Open the extension options.");
   if (!cfg.apiKey) throw new Error("Prowlarr API key is not configured. Open the extension options.");
 
-  const res = await fetch(base + path, {
+  const res = await fetchWithTimeout(base + path, {
     method,
     headers: {
       "X-Api-Key": cfg.apiKey,
@@ -93,7 +113,7 @@ async function stashFetch(query, variables) {
   const base = normalizeBase(cfg.stashUrl);
   if (!base) throw new Error("Stash URL is not configured. Open the extension options.");
 
-  const res = await fetch(base + "/graphql", {
+  const res = await fetchWithTimeout(base + "/graphql", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

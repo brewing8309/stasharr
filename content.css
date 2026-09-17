@@ -14,6 +14,7 @@
 }
 #sdp-button:hover { background: #348b34; }
 #sdp-button:active { transform: translateY(1px); }
+#sdp-button:disabled { opacity: 0.6; cursor: default; }
 
 #sdp-stash-badge {
   position: fixed;
@@ -106,9 +107,12 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   color: #7fd17f;
-  margin-bottom: 4px;
   word-break: break-word;
+  cursor: pointer;
+  user-select: none;
 }
+.sdp-details-query-label:hover { color: #9adf9a; }
+.sdp-details-query-body { margin-top: 6px; }
 .sdp-details-query .sdp-row:last-child { border-bottom: none; }
 .sdp-details-query .sdp-empty { padding: 4px 0; }
 
@@ -195,4 +199,5 @@
   cursor: pointer;
 }
 .sdp-try-harder:hover { background: #9a52d8; }
+.sdp-try-harder:disabled { opacity: 0.6; cursor: default; }
 .sdp-try-harder[hidden] { display: none; }
