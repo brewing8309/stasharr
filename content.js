@@ -6,17 +6,24 @@
  * DOM fallback), searches Prowlarr, and renders resolution-sorted results
  * with a per-release download button.
  *
- * The initial search runs 5 broad queries in parallel (performers+studio+
- * date, performers+date, performers+studio, studio+date, title — see
- * BROAD_QUERIES), merges and de-duplicates the results by guid, and keeps
- * only releases matching at least MIN_SCORE of the scene's known criteria
- * (studio, parent studio, each performer/alias, title, date — see
- * scoreRelease). This avoids guessing which single AND-heavy query an
- * indexer will match, at the cost of more Prowlarr requests up front.
+ * The search runs in up to 3 stages, each a fully automatic parallel batch:
  *
- * Narrower alias/parent-studio combinations (see QUERY_STEPS) aren't run
- * automatically — a "Try Harder" button in the results panel steps through
- * them one at a time, for scenes the broad pass didn't find.
+ * Stage 1 (automatic): 5 broad queries (performers+studio+date,
+ * performers+date, performers+studio, studio+date, title — see
+ * BROAD_QUERIES), merged/de-duplicated by guid, kept if they match at least
+ * MIN_SCORE of the scene's known criteria (studio, parent studio, each
+ * performer/alias, title, date — see scoreRelease/CRITERIA).
+ *
+ * Stage 2 ("🍆 Try Harder", click 1): SECOND_PASS_QUERIES — the same idea
+ * using parent studio and performer aliases instead.
+ *
+ * Stage 3 ("🍑 Last Chance...", click 2): a single "performers only" query,
+ * with no MIN_SCORE filter and no resolution grouping — instead sorted by
+ * how close each release's Prowlarr publish date is to the scene's release
+ * date (closer = higher) and capped at LAST_CHANCE_LIMIT, since a popular
+ * performer's whole catalog could otherwise flood the panel. After this
+ * stage the button is replaced by a sign-off message; there's nothing left
+ * to fall back to.
  *
  * If a StashApp instance is configured, it also checks (via the background
  * script) whether the scene is already in that library and shows a badge
@@ -248,7 +255,7 @@ function joinTerms(terms) {
 // (unlike aliases/parent studio, most releases do carry the plain studio
 // name), but "performers + date" without it stays in the mix as a safety
 // net for releases that don't. Their results are merged, deduped and scored
-// — see runBroadSearch.
+// — see runQueryBatch.
 const BROAD_QUERIES = [
   {
     label: "performers + studio + date",
@@ -272,37 +279,24 @@ const BROAD_QUERIES = [
   }
 ];
 
-// Narrower alias/parent-studio combinations, only tried one at a time via
-// the "Try Harder" button when the broad pass above didn't find enough.
-// They're only useful when a performer has an alias or the studio has a
-// parent brand — when they don't, advanceSearch's dedup skips the step
-// automatically since it'd build an identical query to one already tried
-// (by an earlier step here, or one of the broad queries above).
-// Term order here matches BROAD_QUERIES (performers, then studio, then
-// date) so that a step which turns out identical to a broad query — e.g. a
-// performer with no alias makes "performer aliases" the same as her primary
-// name — produces the exact same query string and gets deduped correctly,
-// instead of just reordered and re-sent to Prowlarr for nothing.
-const QUERY_STEPS = [
+// Stage 2 ("🍆 Try Harder"): a second automatic parallel batch using the
+// parent studio and performer aliases instead of the studio/primary names
+// BROAD_QUERIES already tried. A query is guarded to "" (not left to
+// joinTerms) when there's no parent studio, so it's skipped for the right
+// reason instead of silently collapsing into a plain "performers + date"
+// query mislabeled as this one. Term order matches BROAD_QUERIES so a query
+// that turns out identical to one already tried (e.g. no alias set) is
+// caught by the dedup in onTryHarderClick instead of being re-sent with its
+// words shuffled.
+const SECOND_PASS_QUERIES = [
   {
-    label: "studio + performer aliases + date",
-    build: (scene) => joinTerms([...femaleAliasTerms(scene), studioTerm(scene), formatDateYYMMDD(scene.date)])
-  },
-  {
-    label: "parent studio + performers + date",
-    // Guarded explicitly (not just left to joinTerms) so a missing parent
-    // studio skips this step for the right reason, instead of silently
-    // becoming a plain "performers + date" query mislabeled as this step.
+    label: "performers + parent studio + date",
     build: (scene) => parentStudioTerm(scene)
       ? joinTerms([...scene.females, parentStudioTerm(scene), formatDateYYMMDD(scene.date)])
       : ""
   },
   {
-    label: "studio + performer aliases",
-    build: (scene) => joinTerms([...femaleAliasTerms(scene), studioTerm(scene)])
-  },
-  {
-    label: "parent studio + performers",
+    label: "performers + parent studio",
     build: (scene) => parentStudioTerm(scene) ? joinTerms([...scene.females, parentStudioTerm(scene)]) : ""
   },
   {
@@ -310,6 +304,12 @@ const QUERY_STEPS = [
     build: (scene) => joinTerms([...femaleAliasTerms(scene), formatDateYYMMDD(scene.date)])
   }
 ];
+
+// Stage 3 ("🍑 Last Chance..."): the loosest possible query — performers
+// alone, no date/studio at all.
+function lastChanceQuery(scene) {
+  return joinTerms([...scene.females]);
+}
 
 // Merges Prowlarr result arrays from multiple parallel queries into one
 // list, de-duplicated by release guid (falling back to indexer+title for
@@ -376,7 +376,7 @@ const CRITERIA = [
 ];
 
 // A release must match at least this many of the 5 CRITERIA to be shown —
-// the broad queries in runBroadSearch can pull in a lot of noise (e.g.
+// the broad queries in runQueryBatch can pull in a lot of noise (e.g.
 // every scene of a prolific performer), and this is what filters it back
 // out.
 const MIN_SCORE = 2;
@@ -391,6 +391,37 @@ function matchedCriteria(release, scene) {
 
 function scoreRelease(release, scene) {
   return matchedCriteria(release, scene).length;
+}
+
+// Stage 3 ("Last Chance") only — deliberately NOT part of CRITERIA/
+// scoreRelease, so it never affects the MIN_SCORE filter or ranking
+// anywhere else. Compares a release's Prowlarr publish date against the
+// scene's release date; the closer, the more likely it's the right scene.
+// Returns days apart, or null if either date is missing/unparseable (some
+// torrent indexers don't report a publish date at all) — callers treat
+// null as "worst"/unknown rather than crashing or scoring it as a match.
+function ageDistanceDays(release, scene) {
+  const sceneTime = Date.parse(scene.date || "");
+  const releaseTime = Date.parse(release.publishDate || "");
+  if (Number.isNaN(sceneTime) || Number.isNaN(releaseTime)) return null;
+  return Math.abs(releaseTime - sceneTime) / 86400000;
+}
+
+function ageLabel(release, scene) {
+  const days = ageDistanceDays(release, scene);
+  return days === null ? "publish date unknown" : `${Math.round(days)}d from scene date`;
+}
+
+// Closest publish date first; releases with no usable date sort last.
+function sortByAgeProximity(results, scene) {
+  return results.slice().sort((a, b) => {
+    const da = ageDistanceDays(a, scene);
+    const db = ageDistanceDays(b, scene);
+    if (da === null && db === null) return 0;
+    if (da === null) return 1;
+    if (db === null) return -1;
+    return da - db;
+  });
 }
 
 function sortResults(results, scene) {
@@ -451,9 +482,9 @@ function ensurePanel() {
 // re-render this as each query resolves for a live view — `open` (default
 // false, collapsed) is read back from the previous state by callers so a
 // query block the user manually expanded stays expanded across those
-// re-renders. Once
-// everything is known, `counts` adds the aggregate "found / passed filter"
-// line for the merged, MIN_SCORE-filtered list shown at the bottom.
+// re-renders. Once everything is known, `counts` adds the aggregate
+// "found / passed filter" line for the merged, MIN_SCORE-filtered list
+// shown at the bottom.
 function renderDetails(panel, scene, queryStates, counts) {
   const body = panel.querySelector(".sdp-details-body");
   body.innerHTML = "";
@@ -526,10 +557,27 @@ function renderDetails(panel, scene, queryStates, counts) {
   }
 }
 
-function updateTryHarderButton(panel) {
-  const btn = panel.querySelector(".sdp-try-harder");
+// The action button walks through 3 stages: 1 = show "🍆 Try Harder" (runs
+// SECOND_PASS_QUERIES), 2 = show "🍑 Last Chance..." (runs the Last Chance
+// search), 3 = nothing left — hide the button and show a sign-off message
+// in its place instead.
+const NO_LUCK_HTML = `<div class="sdp-no-luck">🥱 Kein Glück. Zeit für Plan B: die eigene Hand.</div>`;
+
+function updateActionButton(panel) {
+  const foot = panel.querySelector(".sdp-panel-foot");
+  const btn = foot.querySelector(".sdp-try-harder");
   const state = panel._sdpState;
-  btn.hidden = !state || state.stepIndex >= QUERY_STEPS.length - 1;
+
+  if (!state || state.stage >= 3) {
+    btn.hidden = true;
+    if (state && state.stage >= 3 && !foot.querySelector(".sdp-no-luck")) {
+      foot.insertAdjacentHTML("beforeend", NO_LUCK_HTML);
+    }
+    return;
+  }
+
+  btn.hidden = false;
+  btn.textContent = state.stage === 1 ? "🍆 Try Harder" : "🍑 Last Chance...";
 }
 
 function fmtSize(bytes) {
@@ -542,8 +590,9 @@ function fmtSize(bytes) {
 
 // Builds one result row (title, meta line with the match-criteria hit
 // count, download button) — shared by the main results list and the
-// per-query previews in the Details section.
-function buildResultRow(r, scene) {
+// per-query previews in the Details section. `extraMeta` appends further
+// meta-line entries (e.g. the Stage 3 age-proximity label).
+function buildResultRow(r, scene, extraMeta = []) {
   const row = document.createElement("div");
   row.className = "sdp-row";
 
@@ -555,6 +604,7 @@ function buildResultRow(r, scene) {
   if (r.size) meta.push(fmtSize(r.size));
   if (r.protocol) meta.push(r.protocol);
   meta.push(`${matched.length}/${CRITERIA.length} hits (${matched.join(", ")})`);
+  meta.push(...extraMeta);
 
   const info = document.createElement("div");
   info.className = "sdp-info";
@@ -608,6 +658,35 @@ function renderResults(panel, results, scene) {
   return { total: results.length, filtered: filtered.length };
 }
 
+// Stage 3 only: no MIN_SCORE filter (the whole point is to surface releases
+// that don't pass it on title/date/studio text alone), no resolution
+// grouping (a close date match in 720p should outrank a distant one in
+// 2160p, per the "closer = higher" requirement), and a hard cap at
+// LAST_CHANCE_LIMIT so a prolific performer's entire catalog doesn't flood
+// the panel.
+const LAST_CHANCE_LIMIT = 50;
+
+function renderLastChanceResults(panel, results, scene) {
+  const body = panel.querySelector(".sdp-body");
+  body.innerHTML = "";
+
+  if (!results.length) {
+    body.innerHTML = `<div class="sdp-empty">No releases found.</div>`;
+    return;
+  }
+
+  const shown = sortByAgeProximity(results, scene).slice(0, LAST_CHANCE_LIMIT);
+  if (shown.length < results.length) {
+    const note = document.createElement("div");
+    note.className = "sdp-note";
+    note.textContent = `Showing the ${shown.length} closest to the scene date, out of ${results.length} found.`;
+    body.appendChild(note);
+  }
+  for (const r of shown) {
+    body.appendChild(buildResultRow(r, scene, [ageLabel(r, scene)]));
+  }
+}
+
 async function grabRelease(btn, release) {
   btn.disabled = true;
   const prev = btn.textContent;
@@ -650,26 +729,6 @@ async function prowlarrSearch(query) {
 
 const LOADING_HTML = `<div class="sdp-loading"><span class="sdp-spinner" role="status" aria-label="Searching…"></span></div>`;
 
-// Sends `query` to Prowlarr and renders the loading/error state into
-// `panel`. Returns { ok: true, results } or { ok: false, message } — never
-// throws, and never returns without one or the other, so callers can always
-// reflect the outcome in both the body and the Details section.
-async function doSearch(panel, query, emptyMessage) {
-  const body = panel.querySelector(".sdp-body");
-  if (!query) {
-    body.innerHTML = `<div class="sdp-empty">${emptyMessage}</div>`;
-    return { ok: false, message: emptyMessage };
-  }
-
-  body.innerHTML = LOADING_HTML;
-  const outcome = await prowlarrSearch(query);
-  if (!outcome.ok) {
-    body.innerHTML = `<div class="sdp-empty">Search failed: ${outcome.error}</div>`;
-    return { ok: false, message: outcome.error };
-  }
-  return { ok: true, results: outcome.results };
-}
-
 async function resolveSceneForPanel(panel) {
   const sceneId = currentSceneId();
   if (!sceneId) return null;
@@ -683,19 +742,19 @@ async function resolveSceneForPanel(panel) {
   }
 }
 
-// The initial, automatic search: fires all (deduped, non-empty) broad
-// queries in parallel and updates the Details section as each one resolves
-// (see renderDetails), so its per-query spinners turn into that query's own
-// results live rather than everything appearing at once. Once all queries
-// have settled, merges the results and renders them — renderResults applies
-// the MIN_SCORE filter, so this is also where the noise from overly-broad
-// queries (e.g. a prolific performer's whole catalog) gets cut back down.
-async function runBroadSearch(panel, scene, queries) {
+// Runs a batch of queries in parallel (used for both Stage 1 and Stage 2)
+// and updates the Details section as each one resolves (see renderDetails),
+// so its per-query spinners turn into that query's own results live rather
+// than everything appearing at once. Once all queries have settled, merges
+// the results and renders them — renderResults applies the MIN_SCORE
+// filter, so this is also where the noise from overly-broad queries (e.g. a
+// prolific performer's whole catalog) gets cut back down.
+async function runQueryBatch(panel, scene, queries, emptyMessage) {
   const body = panel.querySelector(".sdp-body");
 
   if (!queries.length) {
     renderDetails(panel, scene, []);
-    body.innerHTML = `<div class="sdp-empty">No performers or title found for this scene.</div>`;
+    body.innerHTML = `<div class="sdp-empty">${emptyMessage}</div>`;
     return;
   }
 
@@ -728,42 +787,35 @@ async function runBroadSearch(panel, scene, queries) {
   renderDetails(panel, scene, queryStates, counts);
 }
 
-// Runs the next not-yet-tried step from QUERY_STEPS (the narrower
-// studio/parent-studio/alias combinations) and renders whatever comes back,
-// even if empty. Always exactly one step per call — used only by the "Try
-// Harder" button, since the broad, automatic pass is runBroadSearch above.
-async function advanceSearch(panel) {
-  const state = panel._sdpState;
-  if (!state) return;
+// Stage 3 ("Last Chance"): a single query, rendered through
+// renderLastChanceResults instead of the standard renderResults (no
+// MIN_SCORE filter, no resolution grouping, capped at LAST_CHANCE_LIMIT,
+// sorted by publish-date proximity to the scene's date).
+async function runLastChanceSearch(panel, scene) {
+  const query = lastChanceQuery(scene);
+  const body = panel.querySelector(".sdp-body");
 
-  let stepIndex = state.stepIndex + 1;
-  while (stepIndex < QUERY_STEPS.length) {
-    const step = QUERY_STEPS[stepIndex];
-    const query = step.build(state.scene);
-    if (!query || state.triedQueries.has(query)) {
-      // Nothing to search for at this step (e.g. no parent studio), or it's
-      // identical to a query already tried — skip it.
-      stepIndex++;
-      continue;
-    }
-    state.triedQueries.add(query);
-
-    renderDetails(panel, state.scene, [{ query, status: "pending" }]);
-    const outcome = await doSearch(panel, query, `No usable "${step.label}" search terms for this scene.`);
-    state.stepIndex = stepIndex;
-    updateTryHarderButton(panel);
-    if (!outcome.ok) {
-      renderDetails(panel, state.scene, [{ query, status: "error", error: outcome.message }]);
-      return;
-    }
-
-    const counts = renderResults(panel, outcome.results, state.scene);
-    renderDetails(panel, state.scene, [{ query, status: "done", results: outcome.results }], counts);
+  if (!query) {
+    renderDetails(panel, scene, []);
+    body.innerHTML = `<div class="sdp-empty">No performers found for this scene.</div>`;
     return;
   }
 
-  state.stepIndex = QUERY_STEPS.length;
-  updateTryHarderButton(panel);
+  const queryStates = [{ query, status: "pending" }];
+  renderDetails(panel, scene, queryStates);
+  body.innerHTML = LOADING_HTML;
+
+  const outcome = await prowlarrSearch(query);
+  if (!outcome.ok) {
+    queryStates[0] = { query, status: "error", error: outcome.error };
+    renderDetails(panel, scene, queryStates);
+    body.innerHTML = `<div class="sdp-empty">Search failed: ${outcome.error}</div>`;
+    return;
+  }
+
+  queryStates[0] = { query, status: "done", results: outcome.results };
+  renderLastChanceResults(panel, outcome.results, scene);
+  renderDetails(panel, scene, queryStates);
 }
 
 // Guards against a double-click starting a second, overlapping search: a
@@ -779,22 +831,40 @@ async function onSearchClick() {
     if (!scene) return;
 
     const broadQueries = [...new Set(BROAD_QUERIES.map((q) => q.build(scene)).filter(Boolean))];
-    panel._sdpState = { scene, stepIndex: -1, triedQueries: new Set(broadQueries) };
+    panel._sdpState = { scene, stage: 1, triedQueries: new Set(broadQueries) };
 
-    await runBroadSearch(panel, scene, broadQueries);
-    updateTryHarderButton(panel);
+    await runQueryBatch(panel, scene, broadQueries, "No performers or title found for this scene.");
+    updateActionButton(panel);
   } finally {
     btn.disabled = false;
   }
 }
 
+// Runs whichever stage the panel is currently on: Stage 1 → 2 runs
+// SECOND_PASS_QUERIES (parallel, deduped against everything already tried),
+// Stage 2 → 3 runs the single Last Chance query. Stage advances regardless
+// of whether the stage actually found anything (there's nothing further to
+// fall back to either way), so updateActionButton always reflects the new
+// stage afterwards — including hiding the button and showing the sign-off
+// message once Stage 3 is done.
 async function onTryHarderClick() {
   const panel = document.getElementById("sdp-panel");
   if (!panel || !panel._sdpState) return;
+  const state = panel._sdpState;
   const btn = panel.querySelector(".sdp-try-harder");
   btn.disabled = true;
   try {
-    await advanceSearch(panel);
+    if (state.stage === 1) {
+      const queries = [...new Set(SECOND_PASS_QUERIES.map((q) => q.build(state.scene)).filter(Boolean))]
+        .filter((q) => !state.triedQueries.has(q));
+      queries.forEach((q) => state.triedQueries.add(q));
+      await runQueryBatch(panel, state.scene, queries, "Nothing new to try — no parent studio or aliases available.");
+      state.stage = 2;
+    } else if (state.stage === 2) {
+      await runLastChanceSearch(panel, state.scene);
+      state.stage = 3;
+    }
+    updateActionButton(panel);
   } finally {
     btn.disabled = false;
   }

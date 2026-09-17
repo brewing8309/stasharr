@@ -31,14 +31,22 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
   (unfiltered) results in the same style as the main list below. Expanding a
   query block manually keeps it expanded even as other queries finish and
   refresh the section. Once everything has settled, a summary line shows how
-  many results came back in
-  total and how many passed the criteria filter.
-- The results panel has a **🍆 Try Harder** button to manually search 5
-  narrower fallback combinations one at a time (performer aliases and
-  parent studio in place of the studio/performer names above, plus their
-  +date variants) — for scenes the broad pass didn't find enough for. A step
-  is skipped automatically if there's nothing to search, or it would repeat
-  an already-tried query (e.g. no alias, or the studio has no parent brand).
+  many results came back in total and how many passed the criteria filter.
+- If that's not enough, a **🍆 Try Harder** button runs a second automatic
+  parallel batch: performers + parent studio + date, performers + parent
+  studio, and performer aliases + date. A query is skipped if there's
+  nothing to search, or it would repeat one already tried (e.g. no alias,
+  or the studio has no parent brand). Same MIN_SCORE filter, same merge
+  logic as the first pass.
+- Still nothing good enough? The button becomes **🍑 Last Chance...** — a
+  single, much broader "performers only" search (no date, no studio). This
+  one skips the criteria filter and resolution grouping entirely (the point
+  is to catch releases that don't match on text at all) and instead sorts
+  by how close each release's Prowlarr publish date is to the scene's
+  release date — closer is shown higher — capped at the 50 closest so a
+  prolific performer's whole catalog doesn't flood the panel. After this
+  runs, the button disappears for good and a sign-off message takes its
+  place — there's nothing further to fall back to.
 - Prowlarr search restricted to XXX category `6000` by default (configurable).
 - Results are grouped by resolution (**2160p → 1080p → 720p → other**), and
   within each group sorted by how many of the 5 criteria match (shown on

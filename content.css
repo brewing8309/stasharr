@@ -119,6 +119,7 @@
 .sdp-body { overflow-y: auto; padding: 4px 0; }
 
 .sdp-empty { padding: 16px 12px; color: #9aa0ab; }
+.sdp-note { padding: 8px 12px; color: #9aa0ab; font-size: 11px; }
 
 .sdp-loading { padding: 20px 12px; display: flex; justify-content: center; }
 .sdp-spinner {
@@ -201,3 +202,10 @@
 .sdp-try-harder:hover { background: #9a52d8; }
 .sdp-try-harder:disabled { opacity: 0.6; cursor: default; }
 .sdp-try-harder[hidden] { display: none; }
+
+.sdp-no-luck {
+  text-align: center;
+  padding: 4px 0;
+  color: #9aa0ab;
+  font-size: 12px;
+}
