@@ -32,6 +32,7 @@
   },
   "browser_specific_settings": {
     "gecko": {
+      "id": "stasharr@brewing8309",
 	  "data_collection_permissions": {
 		"required": ["none"]
 	  }
