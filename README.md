@@ -11,6 +11,7 @@ escalating passes, scoring what comes back, and sending your pick straight to yo
 ![Firefox](https://img.shields.io/badge/Firefox-WebExtension-FF7139?logo=firefoxbrowser&logoColor=white)
 ![Manifest](https://img.shields.io/badge/Manifest-v2-blue)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-success)
+![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)
 ![Vibecoded](https://img.shields.io/badge/100%25-vibecoded-ff69b4)
 
 </div>
@@ -19,10 +20,14 @@ escalating passes, scoring what comes back, and sending your pick straight to yo
 
 > ### Heads up: this is 100% vibecoded
 >
-> Every line of this extension was written by Claude, prompt by prompt, with no human writing
-> code by hand. It works, it's commented, and it's been thought through — but it has never seen a
-> code review by a human being, has no test suite, and makes no promises. Read it before you run
-> it. That's the deal.
+> **This software is vibecoded.** It was written end to end by an AI (Claude) from
+> natural-language prompts. No human wrote or reviewed the code by hand. It ships with no tests
+> and no warranty.
+>
+> It works, it's commented, and it's been thought through — but it has never seen a human code
+> review. Read it before you run it. That's the deal.
+>
+> *(This notice is a licensing requirement, not just a disclaimer — see [License](#license).)*
 
 ---
 
@@ -250,6 +255,25 @@ options.html/js  preferences
 Content scripts can't reach cross-origin hosts, so everything network-facing lives in
 `background.js` and is reached by message passing. Credentials never leave `browser.storage.local`
 and are only ever sent to the hosts you configured yourself.
+
+## License
+
+[**PolyForm Noncommercial License 1.0.0**](LICENSE) — source available, not open source.
+
+**You can:** use it, fork it, modify it, redistribute it, run it at home or in any nonprofit,
+school or public institution. Go wild.
+
+**You must:** keep both Required Notices with it — the copyright line and the vibecoded
+statement — and keep them *visible* in any version you publish: in the README, and on the
+extension's preferences page. Reformat them however you like; just don't bury them or make them
+less prominent than your own credits. Nothing requires you to call *your* changes vibecoded.
+
+**You can't:** charge money for it, or use it commercially in any form.
+
+```
+Required Notice: Copyright 2026 brewing8309 — https://github.com/brewing8309/stasharr
+Required Notice: This software is vibecoded. It was written end to end by an AI (Claude) from natural-language prompts. No human wrote or reviewed the code by hand. It ships with no tests and no warranty.
+```
 
 ## Disclaimer
 
