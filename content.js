@@ -449,8 +449,9 @@ function ensurePanel() {
 // list once it's done. `queryStates` is an array of { query, status:
 // "pending" | "done" | "error", results?, error?, open? }, so callers can
 // re-render this as each query resolves for a live view — `open` (default
-// true) is read back from the previous state by callers so a query block
-// the user manually collapsed stays collapsed across those re-renders. Once
+// false, collapsed) is read back from the previous state by callers so a
+// query block the user manually expanded stays expanded across those
+// re-renders. Once
 // everything is known, `counts` adds the aggregate "found / passed filter"
 // line for the merged, MIN_SCORE-filtered list shown at the bottom.
 function renderDetails(panel, scene, queryStates, counts) {
@@ -483,7 +484,7 @@ function renderDetails(panel, scene, queryStates, counts) {
   for (const qs of queryStates) {
     const block = document.createElement("details");
     block.className = "sdp-details-query";
-    block.open = qs.open !== false;
+    block.open = qs.open === true;
     block.addEventListener("toggle", () => { qs.open = block.open; });
 
     const summary = document.createElement("summary");
@@ -698,14 +699,14 @@ async function runBroadSearch(panel, scene, queries) {
     return;
   }
 
-  const queryStates = queries.map((query) => ({ query, status: "pending", open: true }));
+  const queryStates = queries.map((query) => ({ query, status: "pending" }));
   renderDetails(panel, scene, queryStates);
   body.innerHTML = LOADING_HTML;
 
   await Promise.all(queries.map((query, i) =>
     prowlarrSearch(query).then((outcome) => {
       // Carry over whatever the user set `open` to, so a query block they
-      // collapsed manually doesn't pop back open just because another query
+      // expanded manually doesn't collapse again just because another query
       // elsewhere finished and triggered a re-render.
       const open = queryStates[i].open;
       queryStates[i] = outcome.ok
