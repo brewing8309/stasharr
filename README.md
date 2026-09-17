@@ -9,22 +9,23 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
 - Reads studio + performers + date via StashDB's GraphQL API (using your
   logged-in session)
 - "Female" = performers with gender `FEMALE` or `TRANSGENDER_FEMALE`.
-- The initial search fires 4 broad, single-concept queries at Prowlarr **in
-  parallel**, merges the results (de-duplicated by release guid), and scores
-  every release against everything known about the scene — studio, parent
-  studio, each performer (and their alias), title, and date. Only releases
-  matching **at least 2** of those criteria are shown, to filter out noise
-  from broad queries (e.g. a prolific performer's whole catalog):
-  1. Performers + date
-  2. Performers
-  3. Scene title + date
-  4. Scene title
+- The initial search fires 5 broad queries at Prowlarr **in parallel**,
+  merges the results (de-duplicated by release guid), and scores every
+  release against everything known about the scene — studio, parent studio,
+  each performer (and their alias), title, and date. Only releases matching
+  **at least 2** of those criteria are shown, to filter out noise from broad
+  queries (e.g. a prolific performer's whole catalog):
+  1. Performers + studio + date
+  2. Performers + date
+  3. Performers + studio
+  4. Studio + date
+  5. Scene title
 
   Dates are formatted `YY.MM.DD`; scene titles have parenthetical asides and
   punctuation stripped before being used as a search term.
-- The results panel has a **🍆 Try Harder** button to manually search 7
-  narrower, studio-based fallback combinations one at a time (studio +
-  performers, parent studio + performers, performer aliases, and their
+- The results panel has a **🍆 Try Harder** button to manually search 5
+  narrower fallback combinations one at a time (performer aliases and
+  parent studio in place of the studio/performer names above, plus their
   +date variants) — for scenes the broad pass didn't find enough for. A step
   is skipped automatically if there's nothing to search, or it would repeat
   an already-tried query (e.g. no alias, or the studio has no parent brand).

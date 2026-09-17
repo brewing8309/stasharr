@@ -6,17 +6,17 @@
  * DOM fallback), searches Prowlarr, and renders resolution-sorted results
  * with a per-release download button.
  *
- * The initial search runs 4 broad, single-concept queries in parallel
- * (performers+date, performers, title+date, title — see BROAD_QUERIES),
- * merges and de-duplicates the results by guid, and keeps only releases
- * matching at least MIN_SCORE of the scene's known criteria (studio, parent
- * studio, each performer/alias, title, date — see scoreRelease). This avoids
- * guessing which single AND-heavy query an indexer will match, at the cost
- * of more Prowlarr requests up front.
+ * The initial search runs 5 broad queries in parallel (performers+studio+
+ * date, performers+date, performers+studio, studio+date, title — see
+ * BROAD_QUERIES), merges and de-duplicates the results by guid, and keeps
+ * only releases matching at least MIN_SCORE of the scene's known criteria
+ * (studio, parent studio, each performer/alias, title, date — see
+ * scoreRelease). This avoids guessing which single AND-heavy query an
+ * indexer will match, at the cost of more Prowlarr requests up front.
  *
- * Narrower studio/parent-studio/alias combinations (see QUERY_STEPS) aren't
- * run automatically — a "Try Harder" button in the results panel steps
- * through them one at a time, for scenes the broad pass didn't find.
+ * Narrower alias/parent-studio combinations (see QUERY_STEPS) aren't run
+ * automatically — a "Try Harder" button in the results panel steps through
+ * them one at a time, for scenes the broad pass didn't find.
  *
  * If a StashApp instance is configured, it also checks (via the background
  * script) whether the scene is already in that library and shows a badge
@@ -244,23 +244,27 @@ function joinTerms(terms) {
   return terms.filter(Boolean).join(" ").trim();
 }
 
-// Broad, single-concept queries run automatically in parallel: no studio in
-// the mix (AND-ing it in risks missing releases named after the parent
-// brand or nothing at all) and no aliases (the primary name is the more
-// likely match; aliases are a Try-Harder fallback). Their results are
-// merged, deduped and scored — see runBroadSearch.
+// Broad queries run automatically in parallel. Studio is included here now
+// (unlike aliases/parent studio, most releases do carry the plain studio
+// name), but "performers + date" without it stays in the mix as a safety
+// net for releases that don't. Their results are merged, deduped and scored
+// — see runBroadSearch.
 const BROAD_QUERIES = [
+  {
+    label: "performers + studio + date",
+    build: (scene) => joinTerms([...scene.females, studioTerm(scene), formatDateYYMMDD(scene.date)])
+  },
   {
     label: "performers + date",
     build: (scene) => joinTerms([...scene.females, formatDateYYMMDD(scene.date)])
   },
   {
-    label: "performers",
-    build: (scene) => joinTerms([...scene.females])
+    label: "performers + studio",
+    build: (scene) => joinTerms([...scene.females, studioTerm(scene)])
   },
   {
-    label: "title + date",
-    build: (scene) => joinTerms([titleTerm(scene), formatDateYYMMDD(scene.date)])
+    label: "studio + date",
+    build: (scene) => joinTerms([studioTerm(scene), formatDateYYMMDD(scene.date)])
   },
   {
     label: "title",
@@ -268,20 +272,21 @@ const BROAD_QUERIES = [
   }
 ];
 
-// Narrower studio/parent-studio/alias combinations, only tried one at a time
-// via the "Try Harder" button when the broad pass above didn't find enough.
-// Alias/parent steps are only useful when a performer has an alias or the
-// studio has a parent brand — when they don't, advanceSearch's dedup skips
-// the step automatically since it'd build an identical query to one already
-// tried (by an earlier step here, or one of the broad queries above).
+// Narrower alias/parent-studio combinations, only tried one at a time via
+// the "Try Harder" button when the broad pass above didn't find enough.
+// They're only useful when a performer has an alias or the studio has a
+// parent brand — when they don't, advanceSearch's dedup skips the step
+// automatically since it'd build an identical query to one already tried
+// (by an earlier step here, or one of the broad queries above).
+// Term order here matches BROAD_QUERIES (performers, then studio, then
+// date) so that a step which turns out identical to a broad query — e.g. a
+// performer with no alias makes "performer aliases" the same as her primary
+// name — produces the exact same query string and gets deduped correctly,
+// instead of just reordered and re-sent to Prowlarr for nothing.
 const QUERY_STEPS = [
   {
-    label: "studio + performers + date",
-    build: (scene) => joinTerms([studioTerm(scene), ...scene.females, formatDateYYMMDD(scene.date)])
-  },
-  {
     label: "studio + performer aliases + date",
-    build: (scene) => joinTerms([studioTerm(scene), ...femaleAliasTerms(scene), formatDateYYMMDD(scene.date)])
+    build: (scene) => joinTerms([...femaleAliasTerms(scene), studioTerm(scene), formatDateYYMMDD(scene.date)])
   },
   {
     label: "parent studio + performers + date",
@@ -289,20 +294,16 @@ const QUERY_STEPS = [
     // studio skips this step for the right reason, instead of silently
     // becoming a plain "performers + date" query mislabeled as this step.
     build: (scene) => parentStudioTerm(scene)
-      ? joinTerms([parentStudioTerm(scene), ...scene.females, formatDateYYMMDD(scene.date)])
+      ? joinTerms([...scene.females, parentStudioTerm(scene), formatDateYYMMDD(scene.date)])
       : ""
   },
   {
-    label: "studio + performers",
-    build: (scene) => joinTerms([studioTerm(scene), ...scene.females])
-  },
-  {
     label: "studio + performer aliases",
-    build: (scene) => joinTerms([studioTerm(scene), ...femaleAliasTerms(scene)])
+    build: (scene) => joinTerms([...femaleAliasTerms(scene), studioTerm(scene)])
   },
   {
     label: "parent studio + performers",
-    build: (scene) => parentStudioTerm(scene) ? joinTerms([parentStudioTerm(scene), ...scene.females]) : ""
+    build: (scene) => parentStudioTerm(scene) ? joinTerms([...scene.females, parentStudioTerm(scene)]) : ""
   },
   {
     label: "performer aliases + date",
