@@ -12,6 +12,11 @@ const DEFAULTS = {
   apiKey: "",
   // Newznab/Torznab XXX category. Prowlarr accepts a comma separated list.
   categories: "6000",
+  // Max releases per Prowlarr search request. A broad "performers only"
+  // search (Stage 3) can exceed this for a prolific performer, in which
+  // case the extra results simply aren't returned by Prowlarr at all —
+  // raising this gives Stage 3's age-based sort more to work with.
+  searchLimit: "200",
   // The user's own StashApp instance, used to check whether a StashDB scene
   // has already been downloaded.
   stashUrl: "",
@@ -77,10 +82,11 @@ async function prowlarrFetch(path, { method = "GET", body = null } = {}) {
 
 async function search(query) {
   const cfg = await getConfig();
+  const limit = parseInt(cfg.searchLimit, 10);
   const params = new URLSearchParams({
     query,
     type: "search",
-    limit: "200",
+    limit: String(Number.isFinite(limit) && limit > 0 ? limit : 200),
     offset: "0"
   });
   const cats = (cfg.categories || "").trim();

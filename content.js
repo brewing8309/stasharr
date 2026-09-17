@@ -484,8 +484,10 @@ function ensurePanel() {
 // query block the user manually expanded stays expanded across those
 // re-renders. Once everything is known, `counts` adds the aggregate
 // "found / passed filter" line for the merged, MIN_SCORE-filtered list
-// shown at the bottom.
-function renderDetails(panel, scene, queryStates, counts) {
+// shown at the bottom. Takes `state` (not just `scene`) since its per-query
+// preview rows go through buildResultRow, which needs state.grabbed too.
+function renderDetails(panel, state, queryStates, counts) {
+  const scene = state.scene;
   const body = panel.querySelector(".sdp-details-body");
   body.innerHTML = "";
 
@@ -544,7 +546,7 @@ function renderDetails(panel, scene, queryStates, counts) {
       content.appendChild(empty);
     } else {
       for (const r of sortResults(qs.results, scene)) {
-        content.appendChild(buildResultRow(r, scene));
+        content.appendChild(buildResultRow(r, state));
       }
     }
 
@@ -588,11 +590,14 @@ function fmtSize(bytes) {
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
-// Builds one result row (title, meta line with the match-criteria hit
-// count, download button) — shared by the main results list and the
-// per-query previews in the Details section. `extraMeta` appends further
-// meta-line entries (e.g. the Stage 3 age-proximity label).
-function buildResultRow(r, scene, extraMeta = []) {
+// Builds one result row (title, meta line with the match-criteria hit count
+// and publish-date proximity, download button) — shared by the main
+// results list and the per-query previews in the Details section. Takes
+// `state` (not just `scene`) so it can restore a "✓ Sent" button for a
+// release already grabbed earlier in this panel's lifetime — otherwise
+// that status would be lost every time the list re-renders across stages.
+function buildResultRow(r, state) {
+  const scene = state.scene;
   const row = document.createElement("div");
   row.className = "sdp-row";
 
@@ -604,7 +609,9 @@ function buildResultRow(r, scene, extraMeta = []) {
   if (r.size) meta.push(fmtSize(r.size));
   if (r.protocol) meta.push(r.protocol);
   meta.push(`${matched.length}/${CRITERIA.length} hits (${matched.join(", ")})`);
-  meta.push(...extraMeta);
+  // Shown everywhere (not just Stage 3) so it can be eyeballed over time
+  // without yet affecting scoring anywhere — see ageDistanceDays.
+  meta.push(ageLabel(r, scene));
 
   const info = document.createElement("div");
   info.className = "sdp-info";
@@ -615,29 +622,63 @@ function buildResultRow(r, scene, extraMeta = []) {
   const dl = document.createElement("button");
   dl.type = "button";
   dl.className = "sdp-dl";
-  dl.textContent = "Download";
-  dl.addEventListener("click", () => grabRelease(dl, r));
+  if (r.guid && state.grabbed.has(r.guid)) {
+    dl.textContent = "✓ Sent";
+    dl.classList.add("sdp-done");
+    dl.disabled = true;
+  } else {
+    dl.textContent = "Download";
+    dl.addEventListener("click", () => grabRelease(dl, r, state));
+  }
 
   row.appendChild(info);
   row.appendChild(dl);
   return row;
 }
 
+// Small label shown above the list so it's always clear how far the search
+// has progressed — results accumulate across stages (see state.allResults),
+// so without this there'd be no way to tell whether what's on screen is
+// just Stage 1 or everything found so far.
+function stageLabel(state) {
+  if (state.stage === 1) return "Stage 1: automatic search";
+  if (state.stage === 2) return "Stage 1 + 2 (Try Harder)";
+  return "Last Chance — sorted by publish-date proximity";
+}
+
 // Renders the result list into `panel` and returns { total, filtered }
-// counts (for the Details section).
-function renderResults(panel, results, scene) {
+// counts (for the Details section). `results` is expected to already be
+// the accumulated set across every stage run so far (state.allResults),
+// not just the latest batch — see runQueryBatch. `opts.partialFailure`
+// shows a visible warning above the list when some (but not all) queries
+// in the batch that produced these results failed, since that's otherwise
+// only visible by expanding Details.
+function renderResults(panel, results, state, opts = {}) {
+  const scene = state.scene;
   const body = panel.querySelector(".sdp-body");
   body.innerHTML = "";
 
+  const stageDiv = document.createElement("div");
+  stageDiv.className = "sdp-stage-label";
+  stageDiv.textContent = stageLabel(state);
+  body.appendChild(stageDiv);
+
+  if (opts.partialFailure) {
+    const warn = document.createElement("div");
+    warn.className = "sdp-warning";
+    warn.textContent = "Some queries in this batch failed — see Details for which.";
+    body.appendChild(warn);
+  }
+
   if (!results.length) {
-    body.innerHTML = `<div class="sdp-empty">No releases found.</div>`;
+    body.insertAdjacentHTML("beforeend", `<div class="sdp-empty">No releases found.</div>`);
     return { total: 0, filtered: 0 };
   }
 
   const filtered = results.filter((r) => scoreRelease(r, scene) >= MIN_SCORE);
   if (!filtered.length) {
     const criteriaList = CRITERIA.map((c) => c.label).join(", ");
-    body.innerHTML = `<div class="sdp-empty">Found ${results.length} release(s), but none matched at least ${MIN_SCORE} of the scene's known details (${criteriaList}).</div>`;
+    body.insertAdjacentHTML("beforeend", `<div class="sdp-empty">Found ${results.length} release(s), but none matched at least ${MIN_SCORE} of the scene's known details (${criteriaList}).</div>`);
     return { total: results.length, filtered: 0 };
   }
 
@@ -652,7 +693,7 @@ function renderResults(panel, results, scene) {
       h.textContent = res === "other" ? "Other" : res;
       body.appendChild(h);
     }
-    body.appendChild(buildResultRow(r, scene));
+    body.appendChild(buildResultRow(r, state));
   }
 
   return { total: results.length, filtered: filtered.length };
@@ -663,15 +704,23 @@ function renderResults(panel, results, scene) {
 // grouping (a close date match in 720p should outrank a distant one in
 // 2160p, per the "closer = higher" requirement), and a hard cap at
 // LAST_CHANCE_LIMIT so a prolific performer's entire catalog doesn't flood
-// the panel.
+// the panel. `results` is the accumulated set across all 3 stages, same as
+// renderResults, so switching to Last Chance doesn't discard what Stage 1/2
+// already found — it's included in the age-sorted view too.
 const LAST_CHANCE_LIMIT = 50;
 
-function renderLastChanceResults(panel, results, scene) {
+function renderLastChanceResults(panel, results, state) {
+  const scene = state.scene;
   const body = panel.querySelector(".sdp-body");
   body.innerHTML = "";
 
+  const stageDiv = document.createElement("div");
+  stageDiv.className = "sdp-stage-label";
+  stageDiv.textContent = stageLabel(state);
+  body.appendChild(stageDiv);
+
   if (!results.length) {
-    body.innerHTML = `<div class="sdp-empty">No releases found.</div>`;
+    body.insertAdjacentHTML("beforeend", `<div class="sdp-empty">No releases found.</div>`);
     return;
   }
 
@@ -683,19 +732,22 @@ function renderLastChanceResults(panel, results, scene) {
     body.appendChild(note);
   }
   for (const r of shown) {
-    body.appendChild(buildResultRow(r, scene, [ageLabel(r, scene)]));
+    body.appendChild(buildResultRow(r, state));
   }
 }
 
-async function grabRelease(btn, release) {
+async function grabRelease(btn, release, state) {
   btn.disabled = true;
-  const prev = btn.textContent;
   btn.textContent = "Sending…";
   try {
     const resp = await browser.runtime.sendMessage({ type: "grab", release });
     if (resp && resp.ok) {
       btn.textContent = "✓ Sent";
       btn.classList.add("sdp-done");
+      // Remembered on the panel's state so this survives the list being
+      // re-rendered across stages (Try Harder, Last Chance) instead of
+      // reverting to a plain "Download" button and risking a double-grab.
+      if (release.guid) state.grabbed.add(release.guid);
     } else {
       btn.textContent = "Failed";
       btn.classList.add("sdp-error");
@@ -746,20 +798,29 @@ async function resolveSceneForPanel(panel) {
 // and updates the Details section as each one resolves (see renderDetails),
 // so its per-query spinners turn into that query's own results live rather
 // than everything appearing at once. Once all queries have settled, merges
-// the results and renders them — renderResults applies the MIN_SCORE
-// filter, so this is also where the noise from overly-broad queries (e.g. a
-// prolific performer's whole catalog) gets cut back down.
-async function runQueryBatch(panel, scene, queries, emptyMessage) {
+// this batch's results into state.allResults (so nothing found in an
+// earlier stage is lost) and renders the accumulated set — renderResults
+// applies the MIN_SCORE filter, so this is also where the noise from
+// overly-broad queries (e.g. a prolific performer's whole catalog) gets cut
+// back down. Shows a visible warning if some (but not all) queries failed.
+async function runQueryBatch(panel, state, queries, emptyMessage) {
   const body = panel.querySelector(".sdp-body");
 
   if (!queries.length) {
-    renderDetails(panel, scene, []);
-    body.innerHTML = `<div class="sdp-empty">${emptyMessage}</div>`;
+    // Nothing new for this stage to search (e.g. fully deduped away) —
+    // keep showing everything accumulated so far instead of blanking the
+    // list, just note why this stage didn't add anything.
+    const counts = renderResults(panel, state.allResults, state);
+    body.insertAdjacentHTML("afterbegin", `<div class="sdp-note">${emptyMessage}</div>`);
+    renderDetails(panel, state, state.allQueryStates, counts);
     return;
   }
 
-  const queryStates = queries.map((query) => ({ query, status: "pending" }));
-  renderDetails(panel, scene, queryStates);
+  // Appended to (not replacing) state.allQueryStates, so Details keeps
+  // showing every query tried across every stage, not just this batch's.
+  const startIdx = state.allQueryStates.length;
+  state.allQueryStates.push(...queries.map((query) => ({ query, status: "pending" })));
+  renderDetails(panel, state, state.allQueryStates);
   body.innerHTML = LOADING_HTML;
 
   await Promise.all(queries.map((query, i) =>
@@ -767,55 +828,66 @@ async function runQueryBatch(panel, scene, queries, emptyMessage) {
       // Carry over whatever the user set `open` to, so a query block they
       // expanded manually doesn't collapse again just because another query
       // elsewhere finished and triggered a re-render.
-      const open = queryStates[i].open;
-      queryStates[i] = outcome.ok
+      const open = state.allQueryStates[startIdx + i].open;
+      state.allQueryStates[startIdx + i] = outcome.ok
         ? { query, status: "done", results: outcome.results, open }
         : { query, status: "error", error: outcome.error, open };
-      renderDetails(panel, scene, queryStates);
+      renderDetails(panel, state, state.allQueryStates);
     })
   ));
 
-  const succeeded = queryStates.filter((s) => s.status === "done");
+  const batchStates = state.allQueryStates.slice(startIdx);
+  const succeeded = batchStates.filter((s) => s.status === "done");
+  const failed = batchStates.filter((s) => s.status === "error");
   if (!succeeded.length) {
-    const firstError = queryStates.find((s) => s.status === "error");
-    body.innerHTML = `<div class="sdp-empty">Search failed: ${firstError ? firstError.error : "unknown error"}</div>`;
+    body.innerHTML = `<div class="sdp-empty">Search failed: ${failed[0] ? failed[0].error : "unknown error"}</div>`;
     return;
   }
 
-  const merged = mergeResults(succeeded.map((s) => s.results));
-  const counts = renderResults(panel, merged, scene);
-  renderDetails(panel, scene, queryStates, counts);
+  state.allResults = mergeResults([state.allResults, ...succeeded.map((s) => s.results)]);
+  const counts = renderResults(panel, state.allResults, state, { partialFailure: failed.length > 0 });
+  renderDetails(panel, state, state.allQueryStates, counts);
 }
 
 // Stage 3 ("Last Chance"): a single query, rendered through
 // renderLastChanceResults instead of the standard renderResults (no
 // MIN_SCORE filter, no resolution grouping, capped at LAST_CHANCE_LIMIT,
-// sorted by publish-date proximity to the scene's date).
-async function runLastChanceSearch(panel, scene) {
+// sorted by publish-date proximity to the scene's date). Merges into
+// state.allResults first, same as runQueryBatch, so Stage 1/2's results
+// are included in the age-sorted view rather than discarded.
+async function runLastChanceSearch(panel, state) {
+  const scene = state.scene;
   const query = lastChanceQuery(scene);
   const body = panel.querySelector(".sdp-body");
 
   if (!query) {
-    renderDetails(panel, scene, []);
+    renderDetails(panel, state, state.allQueryStates);
     body.innerHTML = `<div class="sdp-empty">No performers found for this scene.</div>`;
     return;
   }
 
-  const queryStates = [{ query, status: "pending" }];
-  renderDetails(panel, scene, queryStates);
+  // Appended to (not replacing) state.allQueryStates, same pattern as
+  // runQueryBatch, so Details keeps showing every query tried across every
+  // stage rather than just this one.
+  const idx = state.allQueryStates.length;
+  state.allQueryStates.push({ query, status: "pending" });
+  renderDetails(panel, state, state.allQueryStates);
   body.innerHTML = LOADING_HTML;
 
   const outcome = await prowlarrSearch(query);
   if (!outcome.ok) {
-    queryStates[0] = { query, status: "error", error: outcome.error };
-    renderDetails(panel, scene, queryStates);
+    const open = state.allQueryStates[idx].open;
+    state.allQueryStates[idx] = { query, status: "error", error: outcome.error, open };
+    renderDetails(panel, state, state.allQueryStates);
     body.innerHTML = `<div class="sdp-empty">Search failed: ${outcome.error}</div>`;
     return;
   }
 
-  queryStates[0] = { query, status: "done", results: outcome.results };
-  renderLastChanceResults(panel, outcome.results, scene);
-  renderDetails(panel, scene, queryStates);
+  const open = state.allQueryStates[idx].open;
+  state.allQueryStates[idx] = { query, status: "done", results: outcome.results, open };
+  state.allResults = mergeResults([state.allResults, outcome.results]);
+  renderLastChanceResults(panel, state.allResults, state);
+  renderDetails(panel, state, state.allQueryStates);
 }
 
 // Guards against a double-click starting a second, overlapping search: a
@@ -831,9 +903,10 @@ async function onSearchClick() {
     if (!scene) return;
 
     const broadQueries = [...new Set(BROAD_QUERIES.map((q) => q.build(scene)).filter(Boolean))];
-    panel._sdpState = { scene, stage: 1, triedQueries: new Set(broadQueries) };
+    const state = { scene, stage: 1, triedQueries: new Set(broadQueries), allResults: [], allQueryStates: [], grabbed: new Set() };
+    panel._sdpState = state;
 
-    await runQueryBatch(panel, scene, broadQueries, "No performers or title found for this scene.");
+    await runQueryBatch(panel, state, broadQueries, "No performers or title found for this scene.");
     updateActionButton(panel);
   } finally {
     btn.disabled = false;
@@ -858,10 +931,10 @@ async function onTryHarderClick() {
       const queries = [...new Set(SECOND_PASS_QUERIES.map((q) => q.build(state.scene)).filter(Boolean))]
         .filter((q) => !state.triedQueries.has(q));
       queries.forEach((q) => state.triedQueries.add(q));
-      await runQueryBatch(panel, state.scene, queries, "Nothing new to try — no parent studio or aliases available.");
+      await runQueryBatch(panel, state, queries, "Nothing new to try — no parent studio or aliases available.");
       state.stage = 2;
     } else if (state.stage === 2) {
-      await runLastChanceSearch(panel, state.scene);
+      await runLastChanceSearch(panel, state);
       state.stage = 3;
     }
     updateActionButton(panel);

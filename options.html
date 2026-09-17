@@ -32,6 +32,10 @@
   <input id="categories" type="text" placeholder="6000" />
   <div class="hint">Comma-separated Newznab/Torznab category IDs. 6000 = XXX. Leave empty for all categories.</div>
 
+  <label for="searchLimit">Result limit</label>
+  <input id="searchLimit" type="number" min="1" step="1" placeholder="200" />
+  <div class="hint">Max releases per search request. Raise this if the "Last Chance" search seems to be missing results for prolific performers.</div>
+
   <h1>StashApp (optional)</h1>
   <p class="hint">If set, scene pages show a badge when the scene is already in your own Stash library.</p>
 
