@@ -441,10 +441,15 @@ function ensurePanel() {
   return panel;
 }
 
-// Fills the collapsible "Details" section: the queries that were (or are
-// being) run, the scene data they were built from, and — once known — how
-// many results came back before/after the MIN_SCORE filter.
-function renderDetails(panel, scene, queries, counts) {
+// Fills the collapsible "Details" section: the scene data behind the
+// search, then one block per query — a spinner while it's still running, an
+// error message if it failed, or its own (unfiltered) results in the same
+// row style as the main list once it's done. `queryStates` is an array of
+// { query, status: "pending" | "done" | "error", results?, error? }, so
+// callers can re-render this as each query resolves for a live view. Once
+// everything is known, `counts` adds the aggregate "found / passed filter"
+// line for the merged, MIN_SCORE-filtered list shown at the bottom.
+function renderDetails(panel, scene, queryStates, counts) {
   const body = panel.querySelector(".sdp-details-body");
   body.innerHTML = "";
 
@@ -458,8 +463,6 @@ function renderDetails(panel, scene, queries, counts) {
     body.appendChild(row);
   };
 
-  addRow("Queries", queries.length ? queries.join(" | ") : "(none)");
-
   const sceneBits = [];
   if (scene.studio) sceneBits.push(`Studio: ${scene.studio}`);
   if (scene.parentStudio) sceneBits.push(`Parent studio: ${scene.parentStudio}`);
@@ -468,8 +471,46 @@ function renderDetails(panel, scene, queries, counts) {
   if (scene.date) sceneBits.push(`Date: ${formatDateYYMMDD(scene.date)}`);
   addRow("Scene", sceneBits.join(" · ") || "(no data)");
 
+  if (!queryStates.length) {
+    addRow("Queries", "(none)");
+    return;
+  }
+
+  for (const qs of queryStates) {
+    const block = document.createElement("div");
+    block.className = "sdp-details-query";
+
+    const label = document.createElement("div");
+    label.className = "sdp-details-query-label";
+    label.textContent = qs.query;
+    block.appendChild(label);
+
+    if (qs.status === "pending") {
+      const loading = document.createElement("div");
+      loading.className = "sdp-loading sdp-loading-inline";
+      loading.innerHTML = `<span class="sdp-spinner" role="status" aria-label="Searching…"></span>`;
+      block.appendChild(loading);
+    } else if (qs.status === "error") {
+      const err = document.createElement("div");
+      err.className = "sdp-empty";
+      err.textContent = `Failed: ${qs.error}`;
+      block.appendChild(err);
+    } else if (!qs.results.length) {
+      const empty = document.createElement("div");
+      empty.className = "sdp-empty";
+      empty.textContent = "No releases found.";
+      block.appendChild(empty);
+    } else {
+      for (const r of sortResults(qs.results, scene)) {
+        block.appendChild(buildResultRow(r, scene));
+      }
+    }
+
+    body.appendChild(block);
+  }
+
   if (counts) {
-    addRow("Results", `${counts.total} found, ${counts.filtered} passed the ≥ ${MIN_SCORE}/${CRITERIA.length} filter`);
+    addRow("Results", `${counts.total} found across all queries, ${counts.filtered} passed the ≥ ${MIN_SCORE}/${CRITERIA.length} filter`);
   }
 }
 
@@ -487,9 +528,41 @@ function fmtSize(bytes) {
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
+// Builds one result row (title, meta line with the match-criteria hit
+// count, download button) — shared by the main results list and the
+// per-query previews in the Details section.
+function buildResultRow(r, scene) {
+  const row = document.createElement("div");
+  row.className = "sdp-row";
+
+  const matched = matchedCriteria(r, scene);
+  const meta = [];
+  if (r.indexer) meta.push(r.indexer);
+  if (typeof r.seeders === "number") meta.push(`${r.seeders} seeders`);
+  else if (typeof r.grabs === "number") meta.push(`${r.grabs} grabs`);
+  if (r.size) meta.push(fmtSize(r.size));
+  if (r.protocol) meta.push(r.protocol);
+  meta.push(`${matched.length}/${CRITERIA.length} hits (${matched.join(", ")})`);
+
+  const info = document.createElement("div");
+  info.className = "sdp-info";
+  info.innerHTML = `<div class="sdp-rel-title"></div><div class="sdp-rel-meta"></div>`;
+  info.querySelector(".sdp-rel-title").textContent = r.title || "(untitled release)";
+  info.querySelector(".sdp-rel-meta").textContent = meta.join(" · ");
+
+  const dl = document.createElement("button");
+  dl.type = "button";
+  dl.className = "sdp-dl";
+  dl.textContent = "Download";
+  dl.addEventListener("click", () => grabRelease(dl, r));
+
+  row.appendChild(info);
+  row.appendChild(dl);
+  return row;
+}
+
 // Renders the result list into `panel` and returns { total, filtered }
-// counts (for the Details section) — `null` results are also valid input,
-// treated the same as an empty array.
+// counts (for the Details section).
 function renderResults(panel, results, scene) {
   const body = panel.querySelector(".sdp-body");
   body.innerHTML = "";
@@ -517,34 +590,7 @@ function renderResults(panel, results, scene) {
       h.textContent = res === "other" ? "Other" : res;
       body.appendChild(h);
     }
-
-    const row = document.createElement("div");
-    row.className = "sdp-row";
-
-    const matched = matchedCriteria(r, scene);
-    const meta = [];
-    if (r.indexer) meta.push(r.indexer);
-    if (typeof r.seeders === "number") meta.push(`${r.seeders} seeders`);
-    else if (typeof r.grabs === "number") meta.push(`${r.grabs} grabs`);
-    if (r.size) meta.push(fmtSize(r.size));
-    if (r.protocol) meta.push(r.protocol);
-    meta.push(`${matched.length}/${CRITERIA.length} hits (${matched.join(", ")})`);
-
-    const info = document.createElement("div");
-    info.className = "sdp-info";
-    info.innerHTML = `<div class="sdp-rel-title"></div><div class="sdp-rel-meta"></div>`;
-    info.querySelector(".sdp-rel-title").textContent = r.title || "(untitled release)";
-    info.querySelector(".sdp-rel-meta").textContent = meta.join(" · ");
-
-    const dl = document.createElement("button");
-    dl.type = "button";
-    dl.className = "sdp-dl";
-    dl.textContent = "Download";
-    dl.addEventListener("click", () => grabRelease(dl, r));
-
-    row.appendChild(info);
-    row.appendChild(dl);
-    body.appendChild(row);
+    body.appendChild(buildResultRow(r, scene));
   }
 
   return { total: results.length, filtered: filtered.length };
@@ -592,23 +638,24 @@ async function prowlarrSearch(query) {
 
 const LOADING_HTML = `<div class="sdp-loading"><span class="sdp-spinner" role="status" aria-label="Searching…"></span></div>`;
 
-// Sends `query` to Prowlarr and renders the loading/error state into `panel`.
-// Returns the results array, or null if nothing more should be rendered
-// (an error or empty-query message was already shown).
+// Sends `query` to Prowlarr and renders the loading/error state into
+// `panel`. Returns { ok: true, results } or { ok: false, message } — never
+// throws, and never returns without one or the other, so callers can always
+// reflect the outcome in both the body and the Details section.
 async function doSearch(panel, query, emptyMessage) {
   const body = panel.querySelector(".sdp-body");
   if (!query) {
     body.innerHTML = `<div class="sdp-empty">${emptyMessage}</div>`;
-    return null;
+    return { ok: false, message: emptyMessage };
   }
 
   body.innerHTML = LOADING_HTML;
   const outcome = await prowlarrSearch(query);
   if (!outcome.ok) {
     body.innerHTML = `<div class="sdp-empty">Search failed: ${outcome.error}</div>`;
-    return null;
+    return { ok: false, message: outcome.error };
   }
-  return outcome.results;
+  return { ok: true, results: outcome.results };
 }
 
 async function resolveSceneForPanel(panel) {
@@ -625,32 +672,44 @@ async function resolveSceneForPanel(panel) {
 }
 
 // The initial, automatic search: fires all (deduped, non-empty) broad
-// queries in parallel, merges the results, and renders them — renderResults
-// applies the MIN_SCORE filter, so this is also where the noise from
-// overly-broad queries (e.g. a prolific performer's whole catalog) gets cut
-// back down.
+// queries in parallel and updates the Details section as each one resolves
+// (see renderDetails), so its per-query spinners turn into that query's own
+// results live rather than everything appearing at once. Once all queries
+// have settled, merges the results and renders them — renderResults applies
+// the MIN_SCORE filter, so this is also where the noise from overly-broad
+// queries (e.g. a prolific performer's whole catalog) gets cut back down.
 async function runBroadSearch(panel, scene, queries) {
   const body = panel.querySelector(".sdp-body");
 
   if (!queries.length) {
-    renderDetails(panel, scene, queries);
+    renderDetails(panel, scene, []);
     body.innerHTML = `<div class="sdp-empty">No performers or title found for this scene.</div>`;
     return;
   }
 
-  renderDetails(panel, scene, queries);
+  const queryStates = queries.map((query) => ({ query, status: "pending" }));
+  renderDetails(panel, scene, queryStates);
   body.innerHTML = LOADING_HTML;
 
-  const outcomes = await Promise.all(queries.map(prowlarrSearch));
-  const succeeded = outcomes.filter((o) => o.ok);
+  await Promise.all(queries.map((query, i) =>
+    prowlarrSearch(query).then((outcome) => {
+      queryStates[i] = outcome.ok
+        ? { query, status: "done", results: outcome.results }
+        : { query, status: "error", error: outcome.error };
+      renderDetails(panel, scene, queryStates);
+    })
+  ));
+
+  const succeeded = queryStates.filter((s) => s.status === "done");
   if (!succeeded.length) {
-    body.innerHTML = `<div class="sdp-empty">Search failed: ${outcomes[0].error}</div>`;
+    const firstError = queryStates.find((s) => s.status === "error");
+    body.innerHTML = `<div class="sdp-empty">Search failed: ${firstError ? firstError.error : "unknown error"}</div>`;
     return;
   }
 
-  const merged = mergeResults(succeeded.map((o) => o.results));
+  const merged = mergeResults(succeeded.map((s) => s.results));
   const counts = renderResults(panel, merged, scene);
-  renderDetails(panel, scene, queries, counts);
+  renderDetails(panel, scene, queryStates, counts);
 }
 
 // Runs the next not-yet-tried step from QUERY_STEPS (the narrower
@@ -673,14 +732,17 @@ async function advanceSearch(panel) {
     }
     state.triedQueries.add(query);
 
-    renderDetails(panel, state.scene, [query]);
-    const results = await doSearch(panel, query, `No usable "${step.label}" search terms for this scene.`);
+    renderDetails(panel, state.scene, [{ query, status: "pending" }]);
+    const outcome = await doSearch(panel, query, `No usable "${step.label}" search terms for this scene.`);
     state.stepIndex = stepIndex;
     updateTryHarderButton(panel);
-    if (results === null) return;
+    if (!outcome.ok) {
+      renderDetails(panel, state.scene, [{ query, status: "error", error: outcome.message }]);
+      return;
+    }
 
-    const counts = renderResults(panel, results, state.scene);
-    renderDetails(panel, state.scene, [query], counts);
+    const counts = renderResults(panel, outcome.results, state.scene);
+    renderDetails(panel, state.scene, [{ query, status: "done", results: outcome.results }], counts);
     return;
   }
 

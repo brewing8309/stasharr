@@ -23,10 +23,12 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
 
   Dates are formatted `YY.MM.DD`; scene titles have parenthetical asides and
   punctuation stripped before being used as a search term. A collapsible
-  **Details** section above the results shows the exact queries that ran,
-  the scene data they were built from, and how many results came back
-  before/after the criteria filter. While a search is running, a spinner
-  shows instead of the query text.
+  **Details** section above the results shows the scene data behind the
+  search and one block per query, listed one below another — each showing a
+  spinner while that query is still running, then that query's own
+  (unfiltered) results live as soon as it comes back, in the same style as
+  the main list below. Once everything has settled, a summary line shows how
+  many results came back in total and how many passed the criteria filter.
 - The results panel has a **🍆 Try Harder** button to manually search 5
   narrower fallback combinations one at a time (performer aliases and
   parent studio in place of the studio/performer names above, plus their
