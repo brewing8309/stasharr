@@ -348,40 +348,49 @@ function normalizeForMatch(s) {
   return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-// A release must match at least this many of the scene's criteria to be
-// shown — the broad queries in runBroadSearch can pull in a lot of noise
-// (e.g. every scene of a prolific performer), and this is what filters it
-// back out.
+function matchesAnyPerformer(hay, scene) {
+  const aliasNames = scene.femaleAliasNames || [];
+  return (scene.females || []).some((name, i) => {
+    const alias = aliasNames[i];
+    return (name && hay.includes(normalizeForMatch(name))) ||
+      (alias && alias !== name && hay.includes(normalizeForMatch(alias)));
+  });
+}
+
+function matchesDate(hay, scene) {
+  const iso = String(scene.date || "").match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!iso) return false;
+  const [, yyyy, mm, dd] = iso;
+  return hay.includes(`${yyyy}${mm}${dd}`) || hay.includes(`${yyyy.slice(2)}${mm}${dd}`);
+}
+
+// The 5 fixed criteria a release is judged against. "Performer" matches if
+// ANY female performer (or her alias) shows up — not counted per performer
+// — so the denominator stays a constant 5 regardless of cast size.
+const CRITERIA = [
+  { label: "Studio", test: (hay, scene) => !!(scene.studio && hay.includes(normalizeForMatch(scene.studio))) },
+  { label: "Parent studio", test: (hay, scene) => !!(scene.parentStudio && scene.parentStudio !== scene.studio && hay.includes(normalizeForMatch(scene.parentStudio))) },
+  { label: "Performer", test: matchesAnyPerformer },
+  { label: "Title", test: (hay, scene) => !!(scene.title && hay.includes(normalizeForMatch(scene.title))) },
+  { label: "Date", test: matchesDate }
+];
+
+// A release must match at least this many of the 5 CRITERIA to be shown —
+// the broad queries in runBroadSearch can pull in a lot of noise (e.g.
+// every scene of a prolific performer), and this is what filters it back
+// out.
 const MIN_SCORE = 2;
 
-// Counts how many of the scene's search criteria (studio, parent studio,
-// each female performer/alias, title, date) show up in the release's title,
-// so releases matching more of what we know about the scene sort first
-// within a resolution group, and pass the MIN_SCORE noise filter.
-function scoreRelease(release, scene) {
+// Returns which of CRITERIA a release matches, e.g. ["Studio", "Performer",
+// "Date"] — used both for the "3/5 hits" line under each result and for the
+// MIN_SCORE filter (score = matched.length).
+function matchedCriteria(release, scene) {
   const hay = normalizeForMatch(`${release.title || ""} ${release.sortTitle || ""}`);
-  let score = 0;
+  return CRITERIA.filter((c) => c.test(hay, scene)).map((c) => c.label);
+}
 
-  if (scene.studio && hay.includes(normalizeForMatch(scene.studio))) score++;
-  if (scene.parentStudio && scene.parentStudio !== scene.studio && hay.includes(normalizeForMatch(scene.parentStudio))) score++;
-
-  const aliasNames = scene.femaleAliasNames || [];
-  (scene.females || []).forEach((name, i) => {
-    const alias = aliasNames[i];
-    const matched = (name && hay.includes(normalizeForMatch(name))) ||
-      (alias && alias !== name && hay.includes(normalizeForMatch(alias)));
-    if (matched) score++;
-  });
-
-  if (scene.title && hay.includes(normalizeForMatch(scene.title))) score++;
-
-  const iso = String(scene.date || "").match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) {
-    const [, yyyy, mm, dd] = iso;
-    if (hay.includes(`${yyyy}${mm}${dd}`) || hay.includes(`${yyyy.slice(2)}${mm}${dd}`)) score++;
-  }
-
-  return score;
+function scoreRelease(release, scene) {
+  return matchedCriteria(release, scene).length;
 }
 
 function sortResults(results, scene) {
@@ -418,7 +427,10 @@ function ensurePanel() {
       <span class="sdp-title">StashDB → Prowlarr</span>
       <button type="button" class="sdp-close" title="Close">✕</button>
     </div>
-    <div class="sdp-query"></div>
+    <details class="sdp-details">
+      <summary>Details</summary>
+      <div class="sdp-details-body"></div>
+    </details>
     <div class="sdp-body"></div>
     <div class="sdp-panel-foot">
       <button type="button" class="sdp-try-harder" hidden>🍆 Try Harder</button>
@@ -427,6 +439,38 @@ function ensurePanel() {
   panel.querySelector(".sdp-try-harder").addEventListener("click", onTryHarderClick);
   document.body.appendChild(panel);
   return panel;
+}
+
+// Fills the collapsible "Details" section: the queries that were (or are
+// being) run, the scene data they were built from, and — once known — how
+// many results came back before/after the MIN_SCORE filter.
+function renderDetails(panel, scene, queries, counts) {
+  const body = panel.querySelector(".sdp-details-body");
+  body.innerHTML = "";
+
+  const addRow = (label, value) => {
+    const row = document.createElement("div");
+    row.className = "sdp-details-row";
+    const strong = document.createElement("strong");
+    strong.textContent = `${label}: `;
+    row.appendChild(strong);
+    row.appendChild(document.createTextNode(value));
+    body.appendChild(row);
+  };
+
+  addRow("Queries", queries.length ? queries.join(" | ") : "(none)");
+
+  const sceneBits = [];
+  if (scene.studio) sceneBits.push(`Studio: ${scene.studio}`);
+  if (scene.parentStudio) sceneBits.push(`Parent studio: ${scene.parentStudio}`);
+  if (scene.females && scene.females.length) sceneBits.push(`Performers: ${scene.females.join(", ")}`);
+  if (scene.title) sceneBits.push(`Title: ${scene.title}`);
+  if (scene.date) sceneBits.push(`Date: ${formatDateYYMMDD(scene.date)}`);
+  addRow("Scene", sceneBits.join(" · ") || "(no data)");
+
+  if (counts) {
+    addRow("Results", `${counts.total} found, ${counts.filtered} passed the ≥ ${MIN_SCORE}/${CRITERIA.length} filter`);
+  }
 }
 
 function updateTryHarderButton(panel) {
@@ -443,19 +487,23 @@ function fmtSize(bytes) {
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
+// Renders the result list into `panel` and returns { total, filtered }
+// counts (for the Details section) — `null` results are also valid input,
+// treated the same as an empty array.
 function renderResults(panel, results, scene) {
   const body = panel.querySelector(".sdp-body");
   body.innerHTML = "";
 
   if (!results.length) {
     body.innerHTML = `<div class="sdp-empty">No releases found.</div>`;
-    return;
+    return { total: 0, filtered: 0 };
   }
 
   const filtered = results.filter((r) => scoreRelease(r, scene) >= MIN_SCORE);
   if (!filtered.length) {
-    body.innerHTML = `<div class="sdp-empty">Found ${results.length} release(s), but none matched at least ${MIN_SCORE} of the scene's known details (studio, performers, title, date).</div>`;
-    return;
+    const criteriaList = CRITERIA.map((c) => c.label).join(", ");
+    body.innerHTML = `<div class="sdp-empty">Found ${results.length} release(s), but none matched at least ${MIN_SCORE} of the scene's known details (${criteriaList}).</div>`;
+    return { total: results.length, filtered: 0 };
   }
 
   const sorted = sortResults(filtered, scene);
@@ -473,12 +521,14 @@ function renderResults(panel, results, scene) {
     const row = document.createElement("div");
     row.className = "sdp-row";
 
+    const matched = matchedCriteria(r, scene);
     const meta = [];
     if (r.indexer) meta.push(r.indexer);
     if (typeof r.seeders === "number") meta.push(`${r.seeders} seeders`);
     else if (typeof r.grabs === "number") meta.push(`${r.grabs} grabs`);
     if (r.size) meta.push(fmtSize(r.size));
     if (r.protocol) meta.push(r.protocol);
+    meta.push(`${matched.length}/${CRITERIA.length} hits (${matched.join(", ")})`);
 
     const info = document.createElement("div");
     info.className = "sdp-info";
@@ -496,6 +546,8 @@ function renderResults(panel, results, scene) {
     row.appendChild(dl);
     body.appendChild(row);
   }
+
+  return { total: results.length, filtered: filtered.length };
 }
 
 async function grabRelease(btn, release) {
@@ -538,18 +590,19 @@ async function prowlarrSearch(query) {
   }
 }
 
+const LOADING_HTML = `<div class="sdp-loading"><span class="sdp-spinner" role="status" aria-label="Searching…"></span></div>`;
+
 // Sends `query` to Prowlarr and renders the loading/error state into `panel`.
 // Returns the results array, or null if nothing more should be rendered
 // (an error or empty-query message was already shown).
 async function doSearch(panel, query, emptyMessage) {
   const body = panel.querySelector(".sdp-body");
-  panel.querySelector(".sdp-query").textContent = `Query: ${query || "(empty)"}`;
   if (!query) {
     body.innerHTML = `<div class="sdp-empty">${emptyMessage}</div>`;
     return null;
   }
 
-  body.innerHTML = `<div class="sdp-loading">Searching Prowlarr…</div>`;
+  body.innerHTML = LOADING_HTML;
   const outcome = await prowlarrSearch(query);
   if (!outcome.ok) {
     body.innerHTML = `<div class="sdp-empty">Search failed: ${outcome.error}</div>`;
@@ -580,13 +633,13 @@ async function runBroadSearch(panel, scene, queries) {
   const body = panel.querySelector(".sdp-body");
 
   if (!queries.length) {
-    panel.querySelector(".sdp-query").textContent = "Query: (empty)";
+    renderDetails(panel, scene, queries);
     body.innerHTML = `<div class="sdp-empty">No performers or title found for this scene.</div>`;
     return;
   }
 
-  panel.querySelector(".sdp-query").textContent = `Queries: ${queries.map((q) => `"${q}"`).join(" | ")}`;
-  body.innerHTML = `<div class="sdp-loading">Searching Prowlarr (${queries.length} ${queries.length === 1 ? "query" : "queries"})…</div>`;
+  renderDetails(panel, scene, queries);
+  body.innerHTML = LOADING_HTML;
 
   const outcomes = await Promise.all(queries.map(prowlarrSearch));
   const succeeded = outcomes.filter((o) => o.ok);
@@ -596,7 +649,8 @@ async function runBroadSearch(panel, scene, queries) {
   }
 
   const merged = mergeResults(succeeded.map((o) => o.results));
-  renderResults(panel, merged, scene);
+  const counts = renderResults(panel, merged, scene);
+  renderDetails(panel, scene, queries, counts);
 }
 
 // Runs the next not-yet-tried step from QUERY_STEPS (the narrower
@@ -619,12 +673,14 @@ async function advanceSearch(panel) {
     }
     state.triedQueries.add(query);
 
+    renderDetails(panel, state.scene, [query]);
     const results = await doSearch(panel, query, `No usable "${step.label}" search terms for this scene.`);
     state.stepIndex = stepIndex;
     updateTryHarderButton(panel);
     if (results === null) return;
 
-    renderResults(panel, results, state.scene);
+    const counts = renderResults(panel, results, state.scene);
+    renderDetails(panel, state.scene, [query], counts);
     return;
   }
 

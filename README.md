@@ -10,11 +10,11 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
   logged-in session)
 - "Female" = performers with gender `FEMALE` or `TRANSGENDER_FEMALE`.
 - The initial search fires 5 broad queries at Prowlarr **in parallel**,
-  merges the results (de-duplicated by release guid), and scores every
-  release against everything known about the scene — studio, parent studio,
-  each performer (and their alias), title, and date. Only releases matching
-  **at least 2** of those criteria are shown, to filter out noise from broad
-  queries (e.g. a prolific performer's whole catalog):
+  merges the results (de-duplicated by release guid), and checks every
+  release against 5 fixed criteria — Studio, Parent studio, Performer (any
+  cast member or her alias), Title, Date. Only releases matching **at least
+  2 of the 5** are shown, to filter out noise from broad queries (e.g. a
+  prolific performer's whole catalog):
   1. Performers + studio + date
   2. Performers + date
   3. Performers + studio
@@ -22,7 +22,11 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
   5. Scene title
 
   Dates are formatted `YY.MM.DD`; scene titles have parenthetical asides and
-  punctuation stripped before being used as a search term.
+  punctuation stripped before being used as a search term. A collapsible
+  **Details** section above the results shows the exact queries that ran,
+  the scene data they were built from, and how many results came back
+  before/after the criteria filter. While a search is running, a spinner
+  shows instead of the query text.
 - The results panel has a **🍆 Try Harder** button to manually search 5
   narrower fallback combinations one at a time (performer aliases and
   parent studio in place of the studio/performer names above, plus their
@@ -31,9 +35,9 @@ lets you start a download for the release you pick. *100% Vibecoded with Claude*
   an already-tried query (e.g. no alias, or the studio has no parent brand).
 - Prowlarr search restricted to XXX category `6000` by default (configurable).
 - Results are grouped by resolution (**2160p → 1080p → 720p → other**), and
-  within each group sorted by how many of the scene's search criteria show
-  up in the release name (the same score used for the minimum-2 filter),
-  then by seeders/grabs.
+  within each group sorted by how many of the 5 criteria match (shown on
+  each result, e.g. "3/5 hits (Studio, Performer, Date)"), then by
+  seeders/grabs.
 - Clicking **Download** tells Prowlarr to grab the release (sends it to the
   download client configured in Prowlarr).
 - If a StashApp URL is configured, each scene page checks (via the
