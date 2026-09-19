@@ -15,6 +15,9 @@
     #status { margin-left: 6px; font-size: 13px; }
     .ok { color: #2b7a2b; }
     .err { color: #b03636; }
+    footer { margin-top: 36px; padding-top: 16px; border-top: 1px solid #ddd; color: #666; font-size: 12px; }
+    footer p { margin: 6px 0; }
+    footer a { color: #2f6fd0; }
   </style>
 </head>
 <body>
@@ -32,11 +35,35 @@
   <input id="categories" type="text" placeholder="6000" />
   <div class="hint">Comma-separated Newznab/Torznab category IDs. 6000 = XXX. Leave empty for all categories.</div>
 
+  <label for="searchLimit">Result limit</label>
+  <input id="searchLimit" type="number" min="1" step="1" placeholder="200" />
+  <div class="hint">Max releases per search request. Raise this if the "Last Chance" search seems to be missing results for prolific performers.</div>
+
+  <h1>StashApp (optional)</h1>
+  <p class="hint">If set, scene pages show a badge when the scene is already in your own Stash library.</p>
+
+  <label for="stashUrl">Stash URL</label>
+  <input id="stashUrl" type="text" placeholder="http://localhost:9999" />
+  <div class="hint">Base URL of your StashApp instance, no trailing slash.</div>
+
+  <label for="stashApiKey">Stash API key</label>
+  <input id="stashApiKey" type="password" placeholder="Settings → Security → API Key" />
+  <div class="hint">Only needed if your Stash instance requires an API key.</div>
+
   <div class="row">
     <button id="save">Save</button>
-    <button id="test" class="secondary">Test connection</button>
+    <button id="test" class="secondary">Test Prowlarr</button>
+    <button id="testStash" class="secondary">Test Stash</button>
     <span id="status"></span>
   </div>
+
+  <!-- Required Notices under the PolyForm Noncommercial License 1.0.0 (see
+       LICENSE). These must stay visible here in any published version. -->
+  <footer>
+    <p>Copyright 2026 brewing8309 — <a href="https://github.com/brewing8309/stasharr" target="_blank" rel="noopener noreferrer">github.com/brewing8309/stasharr</a></p>
+    <p><strong>This software is vibecoded.</strong> It was written end to end by an AI (Claude) from natural-language prompts. No human wrote or reviewed the code by hand. It ships with no tests and no warranty.</p>
+    <p>Licensed under the PolyForm Noncommercial License 1.0.0 — free to use and modify for any noncommercial purpose; selling it is not permitted.</p>
+  </footer>
 
   <script src="options.js"></script>
 </body>
