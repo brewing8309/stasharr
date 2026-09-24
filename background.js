@@ -17,6 +17,8 @@ const DEFAULTS = {
   // case the extra results simply aren't returned by Prowlarr at all —
   // raising this gives Stage 3's age-based sort more to work with.
   searchLimit: "200",
+  // Seconds before a request to any backend is aborted.
+  requestTimeout: "25",
   // The user's own StashApp instance, used to check whether a StashDB scene
   // has already been downloaded.
   stashUrl: "",
@@ -39,17 +41,24 @@ function normalizeBase(url) {
 
 // Prowlarr/Stash requests can otherwise hang indefinitely on a dead
 // indexer or an unreachable instance, leaving the caller (and, in the
-// content script, a spinner) stuck forever.
-const REQUEST_TIMEOUT_MS = 20000;
+// content script, a spinner) stuck forever. Read per request rather than
+// passed in by callers, so all three backends (Prowlarr, Stash, StashDB)
+// honour the setting without threading it through.
+async function requestTimeoutMs() {
+  const cfg = await getConfig();
+  const seconds = parseInt(cfg.requestTimeout, 10);
+  return (Number.isFinite(seconds) && seconds > 0 ? seconds : 25) * 1000;
+}
 
 async function fetchWithTimeout(url, options) {
+  const timeoutMs = await requestTimeoutMs();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (e) {
     if (e.name === "AbortError") {
-      throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${url}`);
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s: ${url}`);
     }
     throw e;
   } finally {

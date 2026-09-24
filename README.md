@@ -207,6 +207,7 @@ Open the add-on's preferences (`about:addons` → stasharr → Preferences) and 
 | **Prowlarr API key** | — | yes | Prowlarr → Settings → General → Security |
 | **Search categories** | `6000` | no | Newznab/Torznab category IDs, comma-separated. `6000` = XXX. Empty = all. |
 | **Result limit** | `200` | no | Max releases Prowlarr returns per query. Raise it if stage 3 seems to be missing hits for a prolific performer. |
+| **Request timeout** | `25` | no | Seconds to wait for Prowlarr, Stash or StashDB before giving up. Raise it if slow indexers keep timing out. |
 | **Stash URL** | — | no | Your own StashApp, e.g. `http://localhost:9999`. Enables the "already in your library" badge. |
 | **Stash API key** | — | no | Only if your Stash requires one. |
 
@@ -231,7 +232,7 @@ stage 3).
 |---|---|
 | Panel says "Could not read scene" | Not logged into StashDB. It falls back to scraping the rendered page, which has no aliases or parent studio — log in for the good data. |
 | Every query fails instantly | Prowlarr URL or API key wrong. Hit **Test Prowlarr** in preferences. |
-| Search hangs, then errors | Requests time out after 20s. Usually a dead indexer in Prowlarr, or an unreachable instance. |
+| Search hangs, then errors | Requests time out after 25s by default. Usually a dead indexer in Prowlarr, or an unreachable instance — raise **Request timeout** if your indexers are just slow. |
 | Some queries fail, others don't | You'll get a warning banner above the results; expand **Details** to see which indexer choked. Partial results still show. |
 | Stage 3 feels like it's missing things | Raise **Result limit**. Prowlarr caps at 200 by default, and a prolific performer blows through that easily. |
 | No "already in Stash" badge | Stash URL not set, or the scene was never scraped from StashDB (matching is done on the stash-box ID StashApp records). |
@@ -244,7 +245,7 @@ No build step, no bundler, no dependencies. Clone it and it runs.
 ```
 manifest.json    MV2, <all_urls> + storage + contextMenus
 background.js    every cross-origin request (Prowlarr, StashApp, StashDB search),
-                 20s timeouts, context-menu registration
+                 configurable timeouts, context-menu registration
 content.js       injected on stashdb.org — scene resolution, query building,
                  scoring, the 3-stage state machine, results panel
 picker.js        injected on demand into any page for the reverse lookup panel
