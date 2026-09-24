@@ -66,8 +66,9 @@ reserved.
   lifetime — including across stage changes — so you can't grab the same thing twice by accident.
 - **Partial failures are visible.** If some queries in a batch fail but others succeed, a warning
   banner appears above the results instead of that only being discoverable in the Details pane.
-- **Requests time out after 20s** instead of hanging forever on a dead indexer or an unreachable
-  instance.
+- **Requests time out** instead of hanging forever on a dead indexer or an unreachable instance.
+  The limit defaults to 25 seconds and is adjustable under **Request timeout**; it covers
+  Prowlarr, Stash and StashDB alike.
 - **Buttons disable themselves mid-search**, so a double-click can't kick off a second
   overlapping run.
 - **A stage label** above the list always says which stage's results you're looking at.
