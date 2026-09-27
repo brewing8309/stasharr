@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.3.1 — 2026-09-27
+
+Matching fixes for names outside plain ASCII, and a round of hardening. The first release to
+arrive through auto-update: if you installed 1.3.0, you don't have to do anything.
+
+### Fixed
+
+- **Accented names match again.** "Zoë Doll" was reduced to `zodoll`, so a release named
+  `Zoe.Doll…` never counted as a Performer hit. Accents are now folded before comparing, for
+  performers, studios and titles alike.
+- **Non-Latin studio names no longer match everything.** A studio written in, say, Japanese
+  normalized to an empty string, and every release "contained" it — one free hit that let
+  unrelated releases past the ≥ 2 filter. Such names now only match releases that carry them.
+- **"✓ Sent" no longer forgets a release** when two Download buttons are clicked in quick
+  succession. Both used to read the stored list at the same time, and the second write dropped
+  the first. Sent releases are now recorded by the background script, one at a time.
+- **Error messages can't inject markup into StashDB.** Failed searches showed Prowlarr's error
+  text as HTML inside the stashdb.org page. Every message that carries outside text is now
+  inserted as plain text.
+- **The DOM fallback reads the right title and date.** When StashDB's API is unreachable, the
+  title came from the tab title (with "| StashDB" attached) and the date was the first date
+  anywhere on the page. Both now come from the scene header; if there's no date there, the
+  search runs without one instead of guessing.
+- **Connection tests report every failure** on the options page, instead of hanging on
+  "Testing…" when the extension couldn't be reached.
+
+### Changed
+
+- **Scene changes are picked up instantly** by reacting to page changes, instead of checking
+  the URL every 600 ms around the clock.
+- **The license notice no longer says "no tests"**, which stopped being true in 1.3.0.
+
 ## 1.3.0 — 2026-09-27
 
 Sharper scoring, a panel that remembers, and an extension that finally updates itself.
