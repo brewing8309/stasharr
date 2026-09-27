@@ -228,10 +228,13 @@ A couple of knobs are deliberately not in the UI, but are one-line edits if you 
 
 1. Open a scene on `stashdb.org`. If it's already in your Stash library, the badge tells you now.
 2. Hit **⬇ Search Prowlarr** (bottom right).
-3. Pick a release, hit **Download**. It turns into **✓ Sent** and stays that way — even across
-   stages — so you can't accidentally grab the same thing twice.
+3. Pick a release, hit **Download**. It turns into **✓ Sent** and stays that way — across
+   stages, new searches, other tabs and reloads, for 90 days — so you can't accidentally grab the
+   same thing twice.
 4. Nothing good? **🍆 Try Harder**, then **🍑 Last Chance...**.
 5. Curious what it actually searched for? Expand **Details** — every query, every raw result.
+6. Come back to a scene within 30 minutes and the panel picks up where you left off, without
+   querying your indexers again. **↻** in the panel header searches fresh.
 
 ## Troubleshooting
 
@@ -240,6 +243,7 @@ A couple of knobs are deliberately not in the UI, but are one-line edits if you 
 | Panel says "Could not read scene" | Not logged into StashDB. It falls back to scraping the rendered page, which has no aliases or parent studio — log in for the good data. |
 | Every query fails instantly | Prowlarr URL or API key wrong. Hit **Test Prowlarr** in preferences. |
 | Search hangs, then errors | Requests time out after 25s by default. Usually a dead indexer in Prowlarr, or an unreachable instance — raise **Request timeout** if your indexers are just slow. |
+| Results look stale | Reopening a scene within 30 minutes restores the last search instead of re-querying. Hit **↻** in the panel header. |
 | Some queries fail, others don't | You'll get a warning banner above the results; expand **Details** to see which indexer choked. Partial results still show. |
 | Stage 3 feels like it's missing things | Raise **Result limit**. Prowlarr caps at 200 by default, and a prolific performer blows through that easily. |
 | No "already in Stash" badge | Stash URL not set, or the scene was never scraped from StashDB (matching is done on the stash-box ID StashApp records). |

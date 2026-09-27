@@ -68,7 +68,7 @@ function injectButton(sceneId) {
   btn.id = "sdp-button";
   btn.type = "button";
   btn.textContent = "⬇ Search Prowlarr";
-  btn.addEventListener("click", onSearchClick);
+  btn.addEventListener("click", () => onSearchClick());
   document.body.appendChild(btn);
 
   checkStashApp(sceneId).then((scene) => {
@@ -312,7 +312,10 @@ function ensurePanel() {
   panel.innerHTML = `
     <div class="sdp-panel-head">
       <span class="sdp-title">StashDB → Prowlarr</span>
-      <button type="button" class="sdp-close" title="Close">✕</button>
+      <span class="sdp-head-actions">
+        <button type="button" class="sdp-refresh" title="Search again">↻</button>
+        <button type="button" class="sdp-close" title="Close">✕</button>
+      </span>
     </div>
     <details class="sdp-details">
       <summary>Details</summary>
@@ -323,6 +326,7 @@ function ensurePanel() {
       <button type="button" class="sdp-try-harder" hidden>🍆 Try Harder</button>
     </div>`;
   panel.querySelector(".sdp-close").addEventListener("click", closePanel);
+  panel.querySelector(".sdp-refresh").addEventListener("click", () => onSearchClick({ fresh: true }));
   panel.querySelector(".sdp-try-harder").addEventListener("click", onTryHarderClick);
   document.body.appendChild(panel);
   return panel;
@@ -449,9 +453,8 @@ function fmtSize(bytes) {
 // Builds one result row (title, meta line with the match-criteria hit count
 // and publish-date proximity, download button) — shared by the main
 // results list and the per-query previews in the Details section. Takes
-// `state` (not just `scene`) so it can restore a "✓ Sent" button for a
-// release already grabbed earlier in this panel's lifetime — otherwise
-// that status would be lost every time the list re-renders across stages.
+// `state` (not just `scene`) so it can show "✓ Sent" for a release already
+// grabbed, here or in any earlier search (see loadGrabbed).
 function buildResultRow(r, state) {
   const scene = state.scene;
   const row = document.createElement("div");
@@ -602,10 +605,11 @@ async function grabRelease(btn, release, state) {
     if (resp && resp.ok) {
       btn.textContent = "✓ Sent";
       btn.classList.add("sdp-done");
-      // Remembered on the panel's state so this survives the list being
-      // re-rendered across stages (Try Harder, Last Chance) instead of
-      // reverting to a plain "Download" button and risking a double-grab.
-      if (release.guid) state.grabbed.add(release.guid);
+      if (release.guid) {
+        state.grabbed.add(release.guid);
+        // Best-effort: failing to persist mustn't turn a successful grab into "Failed".
+        rememberGrabbed(release.guid).catch((e) => console.warn("[StashDB→Prowlarr] Could not remember grab:", e.message));
+      }
     } else {
       btn.textContent = "Failed";
       btn.classList.add("sdp-error");
@@ -748,21 +752,91 @@ async function runLastChanceSearch(panel, state) {
   renderDetails(panel, state, state.allQueryStates);
 }
 
+// GUIDs of releases already sent to Prowlarr ({ guid: sentAt }), kept in
+// storage so a new search, another tab or a reload can't offer them again.
+const GRABBED_MAX_AGE_MS = 90 * 86400000;
+
+async function loadGrabbed() {
+  const { grabbed } = await browser.storage.local.get({ grabbed: {} });
+  return new Set(Object.keys(pruneGrabbed(grabbed, Date.now(), GRABBED_MAX_AGE_MS)));
+}
+
+async function rememberGrabbed(guid) {
+  const { grabbed } = await browser.storage.local.get({ grabbed: {} });
+  const next = pruneGrabbed(grabbed, Date.now(), GRABBED_MAX_AGE_MS);
+  next[guid] = Date.now();
+  await browser.storage.local.set({ grabbed: next });
+}
+
+// Searches per scene, so reopening one (e.g. after navigating back in
+// StashDB's SPA) restores it instead of re-querying every indexer. The
+// entry holds the live state object, so later stages are included too.
+// In memory only: a page reload starts fresh.
+const SCENE_CACHE_TTL_MS = 30 * 60 * 1000;
+const SCENE_CACHE_MAX = 20;
+const sceneCache = new Map();
+
+function cacheScene(sceneId, state) {
+  const now = Date.now();
+  for (const [id, entry] of sceneCache) {
+    if (now - entry.at >= SCENE_CACHE_TTL_MS) sceneCache.delete(id);
+  }
+  sceneCache.delete(sceneId);
+  sceneCache.set(sceneId, { state, at: now });
+  while (sceneCache.size > SCENE_CACHE_MAX) sceneCache.delete(sceneCache.keys().next().value);
+}
+
+// Only a finished search where every query succeeded is worth restoring;
+// one still running or partly failed is re-run instead.
+function cachedScene(sceneId) {
+  const entry = sceneCache.get(sceneId);
+  if (!entry || Date.now() - entry.at >= SCENE_CACHE_TTL_MS) return null;
+  const queries = entry.state.allQueryStates;
+  return queries.length && queries.every((q) => q.status === "done") ? entry : null;
+}
+
+function restorePanel(panel, entry, grabbed) {
+  const state = entry.state;
+  state.grabbed = new Set([...state.grabbed, ...grabbed]);
+  panel._sdpState = state;
+  if (state.stage >= 3) {
+    renderLastChanceResults(panel, state.allResults, state);
+    renderDetails(panel, state, state.allQueryStates);
+  } else {
+    renderDetails(panel, state, state.allQueryStates, renderResults(panel, state.allResults, state));
+  }
+  const mins = Math.round((Date.now() - entry.at) / 60000);
+  panel.querySelector(".sdp-body").insertAdjacentHTML("afterbegin",
+    `<div class="sdp-note">Restored your search from ${mins < 1 ? "just now" : `${mins} min ago`} — ↻ to search again.</div>`);
+  updateActionButton(panel);
+}
+
 // Guards against a double-click starting a second, overlapping search: a
-// disabled button doesn't dispatch click events, so this alone is enough —
-// no separate busy flag needed. Re-enables in `finally` even if something
-// above throws, so a failure never leaves the button stuck.
-async function onSearchClick() {
+// disabled button doesn't dispatch click events, and the explicit check
+// covers the panel's ↻ button, which reuses this handler. Re-enables in
+// `finally` even if something above throws, so a failure never leaves the
+// button stuck.
+async function onSearchClick({ fresh = false } = {}) {
   const btn = document.getElementById("sdp-button");
+  if (btn.disabled) return;
   btn.disabled = true;
   try {
+    const sceneId = currentSceneId();
     const panel = ensurePanel();
+    const grabbed = await loadGrabbed();
+    const cached = fresh ? null : cachedScene(sceneId);
+    if (cached) {
+      restorePanel(panel, cached, grabbed);
+      return;
+    }
+
     const scene = await resolveSceneForPanel(panel);
     if (!scene) return;
 
     const broadQueries = [...new Set(BROAD_QUERIES.map((q) => q.build(scene)).filter(Boolean))];
-    const state = { scene, stage: 1, triedQueries: new Set(broadQueries), allResults: [], allQueryStates: [], grabbed: new Set() };
+    const state = { scene, stage: 1, triedQueries: new Set(broadQueries), allResults: [], allQueryStates: [], grabbed };
     panel._sdpState = state;
+    cacheScene(sceneId, state);
 
     await runQueryBatch(panel, state, broadQueries, "No performers or title found for this scene.");
     updateActionButton(panel);
@@ -773,11 +847,11 @@ async function onSearchClick() {
 
 // Runs whichever stage the panel is currently on: Stage 1 → 2 runs
 // SECOND_PASS_QUERIES (parallel, deduped against everything already tried),
-// Stage 2 → 3 runs the single Last Chance query. Stage advances regardless
-// of whether the stage actually found anything (there's nothing further to
-// fall back to either way), so updateActionButton always reflects the new
-// stage afterwards — including hiding the button and showing the sign-off
-// message once Stage 3 is done.
+// Stage 2 → 3 runs the single Last Chance query. The stage advances before
+// it runs, so the stage label rendered during the run is already the new
+// one, and regardless of whether it finds anything (there's nothing further
+// to fall back to either way) — updateActionButton then reflects it,
+// including hiding the button and showing the sign-off after Stage 3.
 async function onTryHarderClick() {
   const panel = document.getElementById("sdp-panel");
   if (!panel || !panel._sdpState) return;
@@ -789,11 +863,11 @@ async function onTryHarderClick() {
       const queries = [...new Set(SECOND_PASS_QUERIES.map((q) => q.build(state.scene)).filter(Boolean))]
         .filter((q) => !state.triedQueries.has(q));
       queries.forEach((q) => state.triedQueries.add(q));
-      await runQueryBatch(panel, state, queries, "Nothing new to try — no parent studio or aliases available.");
       state.stage = 2;
+      await runQueryBatch(panel, state, queries, "Nothing new to try — no parent studio or aliases available.");
     } else if (state.stage === 2) {
-      await runLastChanceSearch(panel, state);
       state.stage = 3;
+      await runLastChanceSearch(panel, state);
     }
     updateActionButton(panel);
   } finally {

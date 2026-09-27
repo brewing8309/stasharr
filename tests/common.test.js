@@ -130,6 +130,14 @@ test("sortResults ranks by resolution, then score, then seeders", () => {
   assert.deepEqual(sorted, ["Jane.Doe.26.09.10.1080p", "Jane.Doe.1080p", "Jane.Doe.1080p.again", "Jane.Doe.720p"]);
 });
 
+test("pruneGrabbed drops expired entries without mutating its input", () => {
+  const day = 86400000;
+  const grabbed = { old: 0, recent: 89 * day, fresh: 90 * day };
+  assert.deepEqual(c.pruneGrabbed(grabbed, 90 * day, 90 * day), { recent: 89 * day, fresh: 90 * day });
+  assert.equal(Object.keys(grabbed).length, 3);
+  assert.deepEqual(c.pruneGrabbed(undefined, 0, day), {});
+});
+
 test("sortByAgeProximity puts the closest publish date first and unknown dates last", () => {
   const sorted = c.sortByAgeProximity([
     release("none"),

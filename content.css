@@ -63,7 +63,9 @@
   border-bottom: 1px solid #3a3f4a;
 }
 .sdp-title { font-weight: 700; }
-.sdp-close {
+.sdp-head-actions { display: flex; gap: 2px; }
+.sdp-close,
+.sdp-refresh {
   background: transparent;
   border: none;
   color: #b9bdc7;
@@ -72,7 +74,8 @@
   padding: 2px 6px;
   border-radius: 4px;
 }
-.sdp-close:hover { background: #333844; color: #fff; }
+.sdp-close:hover,
+.sdp-refresh:hover { background: #333844; color: #fff; }
 
 .sdp-details {
   border-bottom: 1px solid #2a2e37;

@@ -202,6 +202,11 @@ function sortResults(results, scene) {
     .map((x) => x.r);
 }
 
+// Returns a copy of a { guid: sentAt } map without entries older than maxAgeMs.
+function pruneGrabbed(grabbed, now, maxAgeMs) {
+  return Object.fromEntries(Object.entries(grabbed || {}).filter(([, at]) => now - at < maxAgeMs));
+}
+
 /* ------------------------------------------------------------------ *
  * Right-click selection search                                        *
  * ------------------------------------------------------------------ */
@@ -238,6 +243,6 @@ if (typeof module !== "undefined" && module.exports) {
     RES_ORDER, resolutionOf, performerNameSet, countPerformers, matchesDate,
     titleWords, matchesTitle, CRITERIA, MIN_SCORE,
     matchedCriteria, scoreRelease, ageDistanceDays, ageLabel, sortByAgeProximity,
-    sortResults, cleanSelectionText
+    sortResults, pruneGrabbed, cleanSelectionText
   };
 }
