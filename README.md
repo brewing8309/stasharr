@@ -21,8 +21,8 @@ escalating passes, scoring what comes back, and sending your pick straight to yo
 > ### Heads up: this is 100% vibecoded
 >
 > **This software is vibecoded.** It was written end to end by an AI (Claude) from
-> natural-language prompts. No human wrote or reviewed the code by hand. It ships with no tests
-> and no warranty.
+> natural-language prompts. No human wrote or reviewed the code by hand. It ships with automated
+> tests but no warranty.
 >
 > It works, it's commented, and it's been thought through — but it has never seen a human code
 > review. Read it before you run it. That's the deal.
@@ -305,7 +305,7 @@ less prominent than your own credits. Nothing requires you to call *your* change
 
 ```
 Required Notice: Copyright 2026 brewing8309 — https://github.com/brewing8309/stasharr
-Required Notice: This software is vibecoded. It was written end to end by an AI (Claude) from natural-language prompts. No human wrote or reviewed the code by hand. It ships with no tests and no warranty.
+Required Notice: This software is vibecoded. It was written end to end by an AI (Claude) from natural-language prompts. No human wrote or reviewed the code by hand. It ships with automated tests but no warranty.
 ```
 
 ## Disclaimer

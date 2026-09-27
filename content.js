@@ -59,8 +59,21 @@ function syncButton() {
   if (sceneId) injectButton(sceneId);
 }
 
-// Poll for SPA navigation changes and re-evaluate whether to show the button.
-setInterval(syncButton, 600);
+// StashDB is a client-side SPA, and a content script can't hook its
+// history.pushState. Every route change re-renders the page, though, so
+// re-check on DOM changes (at most once per frame) and on back/forward.
+// syncButton returns right away when the scene hasn't changed.
+let syncQueued = false;
+function queueSync() {
+  if (syncQueued) return;
+  syncQueued = true;
+  requestAnimationFrame(() => {
+    syncQueued = false;
+    syncButton();
+  });
+}
+new MutationObserver(queueSync).observe(document.body, { childList: true, subtree: true });
+window.addEventListener("popstate", queueSync);
 syncButton();
 
 function injectButton(sceneId) {
@@ -124,10 +137,27 @@ async function fetchSceneViaGraphQL(sceneId) {
 // container, whose textContent glues every gender word onto the next name.
 const FEMALE_LABELS = new Set(["female", "transfemale"]);
 
-// No single reliable selector for the scene date across StashDB's markup, so
-// try progressively looser sources: structured data, a <time> element, then
-// a bare ISO date anywhere in the page text.
+// StashDB's scene header is `<h3><span>Title</span></h3>` followed by
+// `<h6><a>Studio</a> • YYYY-MM-DD</h6>` (stash-box Scene.tsx).
+const SCENE_HEADER = ".card-header";
+
+// The page title is "<scene title> | StashDB", and only a fallback for when
+// the header isn't rendered.
+function extractTitleFromDOM() {
+  const h3 = document.querySelector(`${SCENE_HEADER} h3`);
+  if (h3 && h3.textContent.trim()) return h3.textContent.trim();
+  const t = document.title;
+  const cut = t.lastIndexOf(" | ");
+  return (cut > 0 ? t.slice(0, cut) : t).trim();
+}
+
+// The header's date first, then structured data or a <time> element. No
+// guessing from the rest of the page: an unrelated date there (a comment,
+// an edit) would search for the wrong day, which is worse than no date.
 function extractDateFromDOM() {
+  const h6 = document.querySelector(`${SCENE_HEADER} h6`);
+  const inHeader = h6 && h6.textContent.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  if (inHeader) return inHeader[0];
   for (const el of document.querySelectorAll('script[type="application/ld+json"]')) {
     try {
       const data = JSON.parse(el.textContent);
@@ -137,9 +167,7 @@ function extractDateFromDOM() {
     } catch (e) { /* malformed/unrelated JSON-LD block, skip it */ }
   }
   const time = document.querySelector("time[datetime]");
-  if (time) return time.getAttribute("datetime");
-  const m = document.body.textContent.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
-  return m ? m[0] : "";
+  return time ? time.getAttribute("datetime") : "";
 }
 
 function fetchSceneViaDOM() {
@@ -162,7 +190,7 @@ function fetchSceneViaDOM() {
   return {
     studio, parentStudio: "", females, femaleAliasNames: females.slice(),
     femaleNameSets: females.map((n) => performerNameSet(n, "", [])),
-    title: document.title, date: extractDateFromDOM()
+    title: extractTitleFromDOM(), date: extractDateFromDOM()
   };
 }
 
@@ -442,6 +470,15 @@ function updateActionButton(panel) {
   btn.textContent = state.stage === 1 ? "🍆 Try Harder" : "🍑 Last Chance...";
 }
 
+// Status lines carry text from Prowlarr, Stash and StashDB, so they're built
+// with textContent and never interpolated into HTML.
+function messageDiv(className, text) {
+  const div = document.createElement("div");
+  div.className = className;
+  div.textContent = text;
+  return div;
+}
+
 function fmtSize(bytes) {
   if (!bytes || bytes < 0) return "";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -539,7 +576,7 @@ function renderResults(panel, results, state, opts = {}) {
   const filtered = results.filter((r) => scoreRelease(r, scene) >= MIN_SCORE);
   if (!filtered.length) {
     const criteriaList = CRITERIA.map((c) => c.label).join(", ");
-    body.insertAdjacentHTML("beforeend", `<div class="sdp-empty">Found ${results.length} release(s), but none matched at least ${MIN_SCORE} of the scene's known details (${criteriaList}).</div>`);
+    body.appendChild(messageDiv("sdp-empty", `Found ${results.length} release(s), but none matched at least ${MIN_SCORE} of the scene's known details (${criteriaList}).`));
     return { total: results.length, filtered: 0 };
   }
 
@@ -605,11 +642,8 @@ async function grabRelease(btn, release, state) {
     if (resp && resp.ok) {
       btn.textContent = "✓ Sent";
       btn.classList.add("sdp-done");
-      if (release.guid) {
-        state.grabbed.add(release.guid);
-        // Best-effort: failing to persist mustn't turn a successful grab into "Failed".
-        rememberGrabbed(release.guid).catch((e) => console.warn("[StashDB→Prowlarr] Could not remember grab:", e.message));
-      }
+      // background.js persists it; this covers the panel that's already open.
+      if (release.guid) state.grabbed.add(release.guid);
     } else {
       btn.textContent = "Failed";
       btn.classList.add("sdp-error");
@@ -649,7 +683,7 @@ async function resolveSceneForPanel(panel, sceneId) {
   try {
     return await resolveScene(sceneId);
   } catch (e) {
-    body.innerHTML = `<div class="sdp-empty">Could not read scene: ${e.message}</div>`;
+    body.replaceChildren(messageDiv("sdp-empty", `Could not read scene: ${e.message}`));
     return null;
   }
 }
@@ -671,7 +705,7 @@ async function runQueryBatch(panel, state, queries, emptyMessage) {
     // keep showing everything accumulated so far instead of blanking the
     // list, just note why this stage didn't add anything.
     const counts = renderResults(panel, state.allResults, state);
-    body.insertAdjacentHTML("afterbegin", `<div class="sdp-note">${emptyMessage}</div>`);
+    body.prepend(messageDiv("sdp-note", emptyMessage));
     renderDetails(panel, state, state.allQueryStates, counts);
     return;
   }
@@ -700,7 +734,7 @@ async function runQueryBatch(panel, state, queries, emptyMessage) {
   const succeeded = batchStates.filter((s) => s.status === "done");
   const failed = batchStates.filter((s) => s.status === "error");
   if (!succeeded.length) {
-    body.innerHTML = `<div class="sdp-empty">Search failed: ${failed[0] ? failed[0].error : "unknown error"}</div>`;
+    body.replaceChildren(messageDiv("sdp-empty", `Search failed: ${failed[0] ? failed[0].error : "unknown error"}`));
     return;
   }
 
@@ -739,7 +773,7 @@ async function runLastChanceSearch(panel, state) {
     const open = state.allQueryStates[idx].open;
     state.allQueryStates[idx] = { query, status: "error", error: outcome.error, open };
     renderDetails(panel, state, state.allQueryStates);
-    body.innerHTML = `<div class="sdp-empty">Search failed: ${outcome.error}</div>`;
+    body.replaceChildren(messageDiv("sdp-empty", `Search failed: ${outcome.error}`));
     return;
   }
 
@@ -750,20 +784,12 @@ async function runLastChanceSearch(panel, state) {
   renderDetails(panel, state, state.allQueryStates);
 }
 
-// GUIDs of releases already sent to Prowlarr ({ guid: sentAt }), kept in
-// storage so a new search, another tab or a reload can't offer them again.
-const GRABBED_MAX_AGE_MS = 90 * 86400000;
-
+// GUIDs of releases already sent to Prowlarr ({ guid: sentAt }). background.js
+// records them after each grab; reading them here means a new search, another
+// tab or a reload can't offer them again.
 async function loadGrabbed() {
   const { grabbed } = await browser.storage.local.get({ grabbed: {} });
   return new Set(Object.keys(pruneGrabbed(grabbed, Date.now(), GRABBED_MAX_AGE_MS)));
-}
-
-async function rememberGrabbed(guid) {
-  const { grabbed } = await browser.storage.local.get({ grabbed: {} });
-  const next = pruneGrabbed(grabbed, Date.now(), GRABBED_MAX_AGE_MS);
-  next[guid] = Date.now();
-  await browser.storage.local.set({ grabbed: next });
 }
 
 // Searches per scene, so reopening one (e.g. after navigating back in
@@ -804,8 +830,8 @@ function restorePanel(panel, entry, grabbed) {
     renderDetails(panel, state, state.allQueryStates, renderResults(panel, state.allResults, state));
   }
   const mins = Math.round((Date.now() - entry.at) / 60000);
-  panel.querySelector(".sdp-body").insertAdjacentHTML("afterbegin",
-    `<div class="sdp-note">Restored your search from ${mins < 1 ? "just now" : `${mins} min ago`} — ↻ to search again.</div>`);
+  panel.querySelector(".sdp-body").prepend(messageDiv("sdp-note",
+    `Restored your search from ${mins < 1 ? "just now" : `${mins} min ago`} — ↻ to search again.`));
   updateActionButton(panel);
 }
 
