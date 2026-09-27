@@ -111,7 +111,29 @@ async function search(query) {
 async function grab(release) {
   // Prowlarr grabs a release via POST /api/v1/search with the guid + indexerId.
   const body = { guid: release.guid, indexerId: release.indexerId };
-  return prowlarrFetch(`/api/v1/search`, { method: "POST", body });
+  await prowlarrFetch(`/api/v1/search`, { method: "POST", body });
+  if (release.guid) {
+    // Best-effort: failing to persist mustn't turn a successful grab into "Failed".
+    rememberGrabbed(release.guid).catch((e) => console.warn("[StashDB→Prowlarr] Could not remember grab:", e.message));
+  }
+}
+
+// GUIDs of releases already sent to Prowlarr ({ guid: sentAt }), read by
+// content.js so a new search, another tab or a reload can't offer them
+// again. Written only here, one write at a time: two grabs in quick
+// succession would otherwise both read the old map and the second write
+// would drop the first.
+let grabbedWrites = Promise.resolve();
+
+function rememberGrabbed(guid) {
+  const write = grabbedWrites.then(async () => {
+    const { grabbed } = await browser.storage.local.get({ grabbed: {} });
+    const next = pruneGrabbed(grabbed, Date.now(), GRABBED_MAX_AGE_MS);
+    next[guid] = Date.now();
+    await browser.storage.local.set({ grabbed: next });
+  });
+  grabbedWrites = write.catch(() => {});
+  return write;
 }
 
 async function testConnection() {

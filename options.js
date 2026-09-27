@@ -34,29 +34,24 @@ async function save() {
   setStatus("Saved.", "ok");
 }
 
-async function test() {
-  await save();
-  setStatus("Testing…", "");
-  const resp = await browser.runtime.sendMessage({ type: "test" });
-  if (resp && resp.ok) {
-    setStatus(`Connected${resp.info && resp.info.version ? " (Prowlarr " + resp.info.version + ")" : ""}.`, "ok");
-  } else {
-    setStatus((resp && resp.error) || "Connection failed.", "err");
+// A rejected sendMessage (background not ready, extension just reloaded)
+// would otherwise leave "Testing…" on screen with the error only in the console.
+async function testConnection(type, product) {
+  try {
+    await save();
+    setStatus("Testing…", "");
+    const resp = await browser.runtime.sendMessage({ type });
+    if (resp && resp.ok) {
+      setStatus(`Connected${resp.info && resp.info.version ? ` (${product} ${resp.info.version})` : ""}.`, "ok");
+    } else {
+      setStatus((resp && resp.error) || "Connection failed.", "err");
+    }
+  } catch (e) {
+    setStatus(e.message || "Connection failed.", "err");
   }
 }
 
-async function testStash() {
-  await save();
-  setStatus("Testing…", "");
-  const resp = await browser.runtime.sendMessage({ type: "testStash" });
-  if (resp && resp.ok) {
-    setStatus(`Connected${resp.info && resp.info.version ? " (Stash " + resp.info.version + ")" : ""}.`, "ok");
-  } else {
-    setStatus((resp && resp.error) || "Connection failed.", "err");
-  }
-}
-
-$("save").addEventListener("click", save);
-$("test").addEventListener("click", test);
-$("testStash").addEventListener("click", testStash);
-load();
+$("save").addEventListener("click", () => save().catch((e) => setStatus(e.message, "err")));
+$("test").addEventListener("click", () => testConnection("test", "Prowlarr"));
+$("testStash").addEventListener("click", () => testConnection("testStash", "Stash"));
+load().catch((e) => setStatus(`Could not load settings: ${e.message}`, "err"));
