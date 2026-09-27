@@ -1,0 +1,12 @@
+{
+  "addons": {
+    "stasharr@brewing8309": {
+      "updates": [
+        {
+          "version": "1.2.0",
+          "update_link": "https://github.com/brewing8309/stasharr/releases/download/v1.2.0/stasharr-1.2.0.xpi"
+        }
+      ]
+    }
+  }
+}

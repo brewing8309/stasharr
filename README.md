@@ -169,10 +169,13 @@ finds and confirms the scene; it never touches Prowlarr on its own.
 
 ## Install
 
-Firefox refuses to permanently install unsigned extensions on Release and Beta, so pick one:
+Grab the signed `stasharr-<version>.xpi` from [Releases](https://github.com/brewing8309/stasharr/releases)
+and drag it into Firefox. That's it — from 1.2.0 on it **updates itself**: Firefox periodically
+checks [`updates.json`](updates.json) in this repo and pulls newer releases like any other
+add-on. To check right away: `about:addons` → gear icon → **Check for Updates**.
 
 <details>
-<summary><b>Temporary — for trying it out</b> (gone on restart)</summary>
+<summary><b>Temporary — for trying out a branch</b> (gone on restart)</summary>
 
 1. Clone or download this repo.
 2. Open `about:debugging#/runtime/this-firefox`.
@@ -181,10 +184,12 @@ Firefox refuses to permanently install unsigned extensions on Release and Beta, 
 </details>
 
 <details>
-<summary><b>Signed — for keeping it</b> (needs a free AMO account)</summary>
+<summary><b>Signing your own build</b> (for forks)</summary>
 
-Sign it to yourself as an unlisted add-on — it never goes on the public store, and never gets
-reviewed by Mozilla:
+Firefox refuses to permanently install unsigned extensions on Release and Beta. An add-on ID can
+only ever be signed by the AMO account that owns it, so a fork first needs its own `gecko.id` in
+`manifest.json` — and its own `update_url`, or it'll keep polling this repo. Then sign it as an
+unlisted add-on, which never goes on the public store or through Mozilla's review:
 
 ```bash
 npm install --global web-ext
@@ -194,10 +199,7 @@ web-ext sign --channel=unlisted \
 ```
 
 Get the credentials at [addons.mozilla.org → Developer Hub → API Keys](https://addons.mozilla.org/developers/addon/api/key/).
-The signed `.xpi` lands in `web-ext-artifacts/`; drag it into Firefox to install permanently.
-
-The extension ships a fixed add-on ID (`stasharr@brewing8309`), so re-signing a new version
-updates the installed one instead of creating a duplicate.
+The signed `.xpi` lands in `web-ext-artifacts/`.
 
 </details>
 
@@ -269,6 +271,17 @@ tests/           node:test suite — run with `node --test` (Node 20+, nothing t
 Content scripts can't reach cross-origin hosts, so everything network-facing lives in
 `background.js` and is reached by message passing. Credentials never leave `browser.storage.local`
 and are only ever sent to the hosts you configured yourself.
+
+### Releasing
+
+1. Bump `version` in `manifest.json`, add a `CHANGELOG.md` entry, and add an entry to
+   `updates.json` pointing at `releases/download/v<version>/stasharr-<version>.xpi`.
+   `node --test` fails until all three agree.
+2. Sign it: `web-ext sign --channel=unlisted …` (see [Install](#install)).
+3. Create a GitHub release tagged `v<version>` and attach the signed file, renamed to
+   `stasharr-<version>.xpi`.
+4. Merge to `main`. Installs read `updates.json` from `main`, so publishing the release *first*
+   means they never go looking for a file that isn't there yet.
 
 ## License
 

@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.2.0 — 2026-09-27
+
+Sharper scoring, a panel that remembers, and an extension that finally updates itself.
+
+### Added
+
+**Auto-updates.** Installs now check this repo for new versions and update themselves like any
+other add-on, instead of you downloading and dragging in each signed `.xpi` by hand. This kicks
+in *from* 1.2.0 on: see [Upgrading](#upgrading-from-110).
+
+**Searches are remembered per scene.** Come back to a scene within 30 minutes and the panel
+picks up exactly where you left off — same stage, same results, same Details — without querying
+your indexers again. That matters when every search fans out to every indexer and private
+trackers ration their API calls. A search that was still running or had failed queries is re-run
+instead of restored, and the new **↻** button in the panel header always searches fresh.
+
+**A test suite.** `node --test` covers the scoring, sorting and text cleanup, plus checks that
+catch the version, update manifest and settings drifting apart. Nothing to install.
+
+### Changed
+
+- **"✓ Sent" is now permanent.** Previously it only lasted as long as one panel: searching the
+  same scene again offered every release for download again. Sent releases are now remembered
+  for 90 days across new searches, tabs and reloads.
+- **Every alias counts.** Scoring used to check only a performer's first alias, so a release
+  using any other alias scored no Performer hit. All aliases count now, plus the name she's
+  credited as in this specific scene. Short single-word aliases are skipped, since something
+  like "Mia" would match half the index.
+- **The whole cast beats part of it.** A release naming one of three performers used to rank
+  the same as one naming all three. Cast coverage now breaks ties within a resolution group, and
+  rows show it: `3/5 hits (Studio, Performer 2/3, Date)`.
+- **Truncated titles match.** The Title criterion needed the complete title verbatim, which
+  fails on the shortened titles common in release names. At least 60 % of the title's
+  significant words now counts too.
+
+### Fixed
+
+- The stage label above the results lagged a stage behind: after **🍆 Try Harder** it still said
+  "Stage 1", and after **🍑 Last Chance...** it said "Stage 1 + 2".
+
+### Upgrading from 1.1.0
+
+- **Install 1.2.0 by hand, once.** 1.1.0 and earlier don't know where to look for updates, so
+  they can't find this one. Every version after 1.2.0 arrives on its own.
+- **No new permissions.** The remembered sent releases live in the extension's existing storage.
+
 ## 1.1.0 — 2026-09-19
 
 The search got rebuilt from the ground up. 1.0.0 fired **one** query at Prowlarr — studio name

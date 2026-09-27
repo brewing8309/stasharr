@@ -13,6 +13,28 @@ test("common.js loads before the scripts that depend on it", () => {
   assert.deepEqual(manifest.background.scripts, ["common.js", "background.js"]);
 });
 
+test("installs poll updates.json on main of this repo", () => {
+  assert.equal(
+    manifest.browser_specific_settings.gecko.update_url,
+    "https://raw.githubusercontent.com/brewing8309/stasharr/main/updates.json"
+  );
+});
+
+test("updates.json advertises the manifest version with a matching release download", () => {
+  const { id } = manifest.browser_specific_settings.gecko;
+  const updates = JSON.parse(read("updates.json")).addons[id].updates;
+  const entry = updates.find((u) => u.version === manifest.version);
+  assert.ok(entry, `updates.json has no entry for ${manifest.version}`);
+  assert.equal(
+    entry.update_link,
+    `https://github.com/brewing8309/stasharr/releases/download/v${manifest.version}/stasharr-${manifest.version}.xpi`
+  );
+});
+
+test("the newest CHANGELOG entry is the manifest version", () => {
+  assert.equal(read("CHANGELOG.md").match(/^## (\S+)/m)[1], manifest.version);
+});
+
 test("background.js and options.js agree on the settings and their defaults", () => {
   const defaults = (src) => {
     const body = src.match(/const DEFAULTS = \{([\s\S]*?)\};/)[1];
