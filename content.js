@@ -42,21 +42,21 @@ function currentSceneId() {
   return m ? m[1] : null;
 }
 
-let lastPath = null;
+let lastSceneId = null;
 
+// Button, badge and panel all belong to one scene, so any scene change,
+// including straight from one scene to another, clears them and starts
+// over for the new one. Sub-pages of the same scene change nothing.
 function syncButton() {
-  if (location.pathname === lastPath) return;
-  lastPath = location.pathname;
+  const sceneId = currentSceneId();
+  if (sceneId === lastSceneId) return;
+  lastSceneId = sceneId;
 
   const existing = document.getElementById("sdp-button");
-  const sceneId = currentSceneId();
-  if (sceneId) {
-    if (!existing) injectButton(sceneId);
-  } else if (existing) {
-    existing.remove();
-    hideStashBadge();
-    closePanel();
-  }
+  if (existing) existing.remove();
+  hideStashBadge();
+  closePanel();
+  if (sceneId) injectButton(sceneId);
 }
 
 // Poll for SPA navigation changes and re-evaluate whether to show the button.
@@ -68,7 +68,7 @@ function injectButton(sceneId) {
   btn.id = "sdp-button";
   btn.type = "button";
   btn.textContent = "⬇ Search Prowlarr";
-  btn.addEventListener("click", onSearchClick);
+  btn.addEventListener("click", () => onSearchClick());
   document.body.appendChild(btn);
 
   checkStashApp(sceneId).then((scene) => {
@@ -87,7 +87,7 @@ async function fetchSceneViaGraphQL(sceneId) {
       title
       date
       studio { name parent { name } }
-      performers { performer { name gender aliases } }
+      performers { performer { name gender aliases } as }
     }
   }`;
   const url = new URL("/graphql", location.origin).href;
@@ -105,14 +105,15 @@ async function fetchSceneViaGraphQL(sceneId) {
 
   const studio = scene.studio ? scene.studio.name : "";
   const parentStudio = scene.studio && scene.studio.parent ? scene.studio.parent.name : "";
-  const femalePerformers = (scene.performers || [])
-    .map((p) => p.performer)
-    .filter((p) => p && FEMALE_GENDERS.has(p.gender));
-  const females = femalePerformers.map((p) => p.name);
+  const appearances = (scene.performers || [])
+    .filter((a) => a.performer && FEMALE_GENDERS.has(a.performer.gender));
+  const females = appearances.map((a) => a.performer.name);
   // One alias per performer (their first listed one) is enough to give the
   // search cascade an alternate name to try — not every alias.
-  const femaleAliasNames = femalePerformers.map((p) => (p.aliases && p.aliases[0]) || p.name);
-  return { studio, parentStudio, females, femaleAliasNames, title: scene.title, date: scene.date || "" };
+  const femaleAliasNames = appearances.map((a) => (a.performer.aliases && a.performer.aliases[0]) || a.performer.name);
+  // Scoring, unlike querying, costs nothing per extra name, so it uses all of them.
+  const femaleNameSets = appearances.map((a) => performerNameSet(a.performer.name, a.as, a.performer.aliases));
+  return { studio, parentStudio, females, femaleAliasNames, femaleNameSets, title: scene.title, date: scene.date || "" };
 }
 
 // DOM fallback: parse the rendered scene page. StashDB renders each performer
@@ -158,7 +159,11 @@ function fetchSceneViaDOM() {
   // No aliases or parent studio available from the rendered page — the
   // alias/parent search steps will just no-op (identical to the primary
   // studio/name steps) rather than add anything here.
-  return { studio, parentStudio: "", females, femaleAliasNames: females.slice(), title: document.title, date: extractDateFromDOM() };
+  return {
+    studio, parentStudio: "", females, femaleAliasNames: females.slice(),
+    femaleNameSets: females.map((n) => performerNameSet(n, "", [])),
+    title: document.title, date: extractDateFromDOM()
+  };
 }
 
 async function resolveScene(sceneId) {
@@ -211,14 +216,6 @@ function showStashBadge(scene) {
   document.body.appendChild(badge);
 }
 
-// Some releases are named by date instead of studio, e.g. "26.09.10" for
-// 2026-09-10. StashDB dates come as "YYYY-MM-DD"; take the last two digits
-// of the year to match that convention.
-function formatDateYYMMDD(dateStr) {
-  const m = String(dateStr || "").match(/(\d{4})-(\d{2})-(\d{2})/);
-  return m ? `${m[1].slice(2)}.${m[2]}.${m[3]}` : "";
-}
-
 function studioTerm(scene) {
   return (scene.studio || "").replace(/\s+/g, "");
 }
@@ -229,18 +226,6 @@ function parentStudioTerm(scene) {
 
 function femaleAliasTerms(scene) {
   return scene.femaleAliasNames || scene.females;
-}
-
-// Strips parenthetical asides ("(Part 2)") and punctuation from a scene
-// title before it's used as a search term — most Torznab searches treat the
-// query as required tokens, so stray punctuation/asides just narrow the
-// search for no benefit. Scoring isn't affected: it already normalizes.
-function cleanTitle(title) {
-  return String(title || "")
-    .replace(/[([{][^)\]}]*[)\]}]/g, " ")
-    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function titleTerm(scene) {
@@ -311,135 +296,6 @@ function lastChanceQuery(scene) {
   return joinTerms([...scene.females]);
 }
 
-// Merges Prowlarr result arrays from multiple parallel queries into one
-// list, de-duplicated by release guid (falling back to indexer+title for
-// any release missing one, which shouldn't normally happen).
-function mergeResults(resultArrays) {
-  const seen = new Set();
-  const merged = [];
-  for (const results of resultArrays) {
-    for (const r of results) {
-      const key = r.guid || `${r.indexer}|${r.title}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      merged.push(r);
-    }
-  }
-  return merged;
-}
-
-/* ------------------------------------------------------------------ *
- * Results sorting                                                     *
- * ------------------------------------------------------------------ */
-
-// Rank: 2160p first, then 1080p, then 720p, then everything else.
-const RES_ORDER = ["2160p", "1080p", "720p"];
-
-function resolutionOf(release) {
-  const hay = `${release.title || ""} ${release.sortTitle || ""}`;
-  if (/\b(2160p|4k|uhd)\b/i.test(hay)) return "2160p";
-  if (/\b1080p\b/i.test(hay)) return "1080p";
-  if (/\b720p\b/i.test(hay)) return "720p";
-  const m = hay.match(/\b(\d{3,4})p\b/i);
-  return m ? m[1].toLowerCase() + "p" : "other";
-}
-
-function normalizeForMatch(s) {
-  return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
-function matchesAnyPerformer(hay, scene) {
-  const aliasNames = scene.femaleAliasNames || [];
-  return (scene.females || []).some((name, i) => {
-    const alias = aliasNames[i];
-    return (name && hay.includes(normalizeForMatch(name))) ||
-      (alias && alias !== name && hay.includes(normalizeForMatch(alias)));
-  });
-}
-
-function matchesDate(hay, scene) {
-  const iso = String(scene.date || "").match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (!iso) return false;
-  const [, yyyy, mm, dd] = iso;
-  return hay.includes(`${yyyy}${mm}${dd}`) || hay.includes(`${yyyy.slice(2)}${mm}${dd}`);
-}
-
-// The 5 fixed criteria a release is judged against. "Performer" matches if
-// ANY female performer (or her alias) shows up — not counted per performer
-// — so the denominator stays a constant 5 regardless of cast size.
-const CRITERIA = [
-  { label: "Studio", test: (hay, scene) => !!(scene.studio && hay.includes(normalizeForMatch(scene.studio))) },
-  { label: "Parent studio", test: (hay, scene) => !!(scene.parentStudio && scene.parentStudio !== scene.studio && hay.includes(normalizeForMatch(scene.parentStudio))) },
-  { label: "Performer", test: matchesAnyPerformer },
-  { label: "Title", test: (hay, scene) => !!(scene.title && hay.includes(normalizeForMatch(scene.title))) },
-  { label: "Date", test: matchesDate }
-];
-
-// A release must match at least this many of the 5 CRITERIA to be shown —
-// the broad queries in runQueryBatch can pull in a lot of noise (e.g.
-// every scene of a prolific performer), and this is what filters it back
-// out.
-const MIN_SCORE = 2;
-
-// Returns which of CRITERIA a release matches, e.g. ["Studio", "Performer",
-// "Date"] — used both for the "3/5 hits" line under each result and for the
-// MIN_SCORE filter (score = matched.length).
-function matchedCriteria(release, scene) {
-  const hay = normalizeForMatch(`${release.title || ""} ${release.sortTitle || ""}`);
-  return CRITERIA.filter((c) => c.test(hay, scene)).map((c) => c.label);
-}
-
-function scoreRelease(release, scene) {
-  return matchedCriteria(release, scene).length;
-}
-
-// Stage 3 ("Last Chance") only — deliberately NOT part of CRITERIA/
-// scoreRelease, so it never affects the MIN_SCORE filter or ranking
-// anywhere else. Compares a release's Prowlarr publish date against the
-// scene's release date; the closer, the more likely it's the right scene.
-// Returns days apart, or null if either date is missing/unparseable (some
-// torrent indexers don't report a publish date at all) — callers treat
-// null as "worst"/unknown rather than crashing or scoring it as a match.
-function ageDistanceDays(release, scene) {
-  const sceneTime = Date.parse(scene.date || "");
-  const releaseTime = Date.parse(release.publishDate || "");
-  if (Number.isNaN(sceneTime) || Number.isNaN(releaseTime)) return null;
-  return Math.abs(releaseTime - sceneTime) / 86400000;
-}
-
-function ageLabel(release, scene) {
-  const days = ageDistanceDays(release, scene);
-  return days === null ? "publish date unknown" : `${Math.round(days)}d from scene date`;
-}
-
-// Closest publish date first; releases with no usable date sort last.
-function sortByAgeProximity(results, scene) {
-  return results.slice().sort((a, b) => {
-    const da = ageDistanceDays(a, scene);
-    const db = ageDistanceDays(b, scene);
-    if (da === null && db === null) return 0;
-    if (da === null) return 1;
-    if (db === null) return -1;
-    return da - db;
-  });
-}
-
-function sortResults(results, scene) {
-  const rank = (r) => {
-    const idx = RES_ORDER.indexOf(resolutionOf(r));
-    return idx === -1 ? RES_ORDER.length : idx;
-  };
-  return results.slice().sort((a, b) => {
-    const ra = rank(a), rb = rank(b);
-    if (ra !== rb) return ra - rb;
-    // Within the same resolution bucket, prefer releases matching more of
-    // the scene's search criteria, then more seeders/grabs.
-    const sa = scoreRelease(a, scene), sb = scoreRelease(b, scene);
-    if (sa !== sb) return sb - sa;
-    return (b.seeders ?? b.grabs ?? 0) - (a.seeders ?? a.grabs ?? 0);
-  });
-}
-
 /* ------------------------------------------------------------------ *
  * UI: results panel                                                   *
  * ------------------------------------------------------------------ */
@@ -456,7 +312,10 @@ function ensurePanel() {
   panel.innerHTML = `
     <div class="sdp-panel-head">
       <span class="sdp-title">StashDB → Prowlarr</span>
-      <button type="button" class="sdp-close" title="Close">✕</button>
+      <span class="sdp-head-actions">
+        <button type="button" class="sdp-refresh" title="Search again">↻</button>
+        <button type="button" class="sdp-close" title="Close">✕</button>
+      </span>
     </div>
     <details class="sdp-details">
       <summary>Details</summary>
@@ -467,6 +326,7 @@ function ensurePanel() {
       <button type="button" class="sdp-try-harder" hidden>🍆 Try Harder</button>
     </div>`;
   panel.querySelector(".sdp-close").addEventListener("click", closePanel);
+  panel.querySelector(".sdp-refresh").addEventListener("click", () => onSearchClick({ fresh: true }));
   panel.querySelector(".sdp-try-harder").addEventListener("click", onTryHarderClick);
   document.body.appendChild(panel);
   return panel;
@@ -593,15 +453,16 @@ function fmtSize(bytes) {
 // Builds one result row (title, meta line with the match-criteria hit count
 // and publish-date proximity, download button) — shared by the main
 // results list and the per-query previews in the Details section. Takes
-// `state` (not just `scene`) so it can restore a "✓ Sent" button for a
-// release already grabbed earlier in this panel's lifetime — otherwise
-// that status would be lost every time the list re-renders across stages.
+// `state` (not just `scene`) so it can show "✓ Sent" for a release already
+// grabbed, here or in any earlier search (see loadGrabbed).
 function buildResultRow(r, state) {
   const scene = state.scene;
   const row = document.createElement("div");
   row.className = "sdp-row";
 
-  const matched = matchedCriteria(r, scene);
+  // With more than one performer, show how much of the cast the release names ("Performer 2/3").
+  const cast = scene.females.length > 1 ? ` ${countPerformers(releaseHay(r), scene)}/${scene.females.length}` : "";
+  const matched = matchedCriteria(r, scene).map((label) => (label === "Performer" ? label + cast : label));
   const meta = [];
   if (r.indexer) meta.push(r.indexer);
   if (typeof r.seeders === "number") meta.push(`${r.seeders} seeders`);
@@ -744,10 +605,11 @@ async function grabRelease(btn, release, state) {
     if (resp && resp.ok) {
       btn.textContent = "✓ Sent";
       btn.classList.add("sdp-done");
-      // Remembered on the panel's state so this survives the list being
-      // re-rendered across stages (Try Harder, Last Chance) instead of
-      // reverting to a plain "Download" button and risking a double-grab.
-      if (release.guid) state.grabbed.add(release.guid);
+      if (release.guid) {
+        state.grabbed.add(release.guid);
+        // Best-effort: failing to persist mustn't turn a successful grab into "Failed".
+        rememberGrabbed(release.guid).catch((e) => console.warn("[StashDB→Prowlarr] Could not remember grab:", e.message));
+      }
     } else {
       btn.textContent = "Failed";
       btn.classList.add("sdp-error");
@@ -781,9 +643,7 @@ async function prowlarrSearch(query) {
 
 const LOADING_HTML = `<div class="sdp-loading"><span class="sdp-spinner" role="status" aria-label="Searching…"></span></div>`;
 
-async function resolveSceneForPanel(panel) {
-  const sceneId = currentSceneId();
-  if (!sceneId) return null;
+async function resolveSceneForPanel(panel, sceneId) {
   const body = panel.querySelector(".sdp-body");
   body.innerHTML = `<div class="sdp-loading">Reading scene…</div>`;
   try {
@@ -890,21 +750,93 @@ async function runLastChanceSearch(panel, state) {
   renderDetails(panel, state, state.allQueryStates);
 }
 
+// GUIDs of releases already sent to Prowlarr ({ guid: sentAt }), kept in
+// storage so a new search, another tab or a reload can't offer them again.
+const GRABBED_MAX_AGE_MS = 90 * 86400000;
+
+async function loadGrabbed() {
+  const { grabbed } = await browser.storage.local.get({ grabbed: {} });
+  return new Set(Object.keys(pruneGrabbed(grabbed, Date.now(), GRABBED_MAX_AGE_MS)));
+}
+
+async function rememberGrabbed(guid) {
+  const { grabbed } = await browser.storage.local.get({ grabbed: {} });
+  const next = pruneGrabbed(grabbed, Date.now(), GRABBED_MAX_AGE_MS);
+  next[guid] = Date.now();
+  await browser.storage.local.set({ grabbed: next });
+}
+
+// Searches per scene, so reopening one (e.g. after navigating back in
+// StashDB's SPA) restores it instead of re-querying every indexer. The
+// entry holds the live state object, so later stages are included too.
+// In memory only: a page reload starts fresh.
+const SCENE_CACHE_TTL_MS = 30 * 60 * 1000;
+const SCENE_CACHE_MAX = 20;
+const sceneCache = new Map();
+
+function cacheScene(sceneId, state) {
+  const now = Date.now();
+  for (const [id, entry] of sceneCache) {
+    if (now - entry.at >= SCENE_CACHE_TTL_MS) sceneCache.delete(id);
+  }
+  sceneCache.delete(sceneId);
+  sceneCache.set(sceneId, { state, at: now });
+  while (sceneCache.size > SCENE_CACHE_MAX) sceneCache.delete(sceneCache.keys().next().value);
+}
+
+// Only a finished search where every query succeeded is worth restoring;
+// one still running or partly failed is re-run instead.
+function cachedScene(sceneId) {
+  const entry = sceneCache.get(sceneId);
+  if (!entry || Date.now() - entry.at >= SCENE_CACHE_TTL_MS) return null;
+  const queries = entry.state.allQueryStates;
+  return queries.length && queries.every((q) => q.status === "done") ? entry : null;
+}
+
+function restorePanel(panel, entry, grabbed) {
+  const state = entry.state;
+  state.grabbed = new Set([...state.grabbed, ...grabbed]);
+  panel._sdpState = state;
+  if (state.stage >= 3) {
+    renderLastChanceResults(panel, state.allResults, state);
+    renderDetails(panel, state, state.allQueryStates);
+  } else {
+    renderDetails(panel, state, state.allQueryStates, renderResults(panel, state.allResults, state));
+  }
+  const mins = Math.round((Date.now() - entry.at) / 60000);
+  panel.querySelector(".sdp-body").insertAdjacentHTML("afterbegin",
+    `<div class="sdp-note">Restored your search from ${mins < 1 ? "just now" : `${mins} min ago`} — ↻ to search again.</div>`);
+  updateActionButton(panel);
+}
+
 // Guards against a double-click starting a second, overlapping search: a
-// disabled button doesn't dispatch click events, so this alone is enough —
-// no separate busy flag needed. Re-enables in `finally` even if something
-// above throws, so a failure never leaves the button stuck.
-async function onSearchClick() {
+// disabled button doesn't dispatch click events, and the explicit check
+// covers the panel's ↻ button, which reuses this handler. Re-enables in
+// `finally` even if something above throws, so a failure never leaves the
+// button stuck.
+async function onSearchClick({ fresh = false } = {}) {
   const btn = document.getElementById("sdp-button");
+  if (btn.disabled) return;
   btn.disabled = true;
   try {
+    const sceneId = currentSceneId();
+    if (!sceneId) return;
     const panel = ensurePanel();
-    const scene = await resolveSceneForPanel(panel);
+    const grabbed = await loadGrabbed();
+    const cached = fresh ? null : cachedScene(sceneId);
+    if (cached) {
+      restorePanel(panel, cached, grabbed);
+      return;
+    }
+
+    // sceneId, not a fresh URL read: the user may have moved on during the awaits.
+    const scene = await resolveSceneForPanel(panel, sceneId);
     if (!scene) return;
 
     const broadQueries = [...new Set(BROAD_QUERIES.map((q) => q.build(scene)).filter(Boolean))];
-    const state = { scene, stage: 1, triedQueries: new Set(broadQueries), allResults: [], allQueryStates: [], grabbed: new Set() };
+    const state = { scene, stage: 1, triedQueries: new Set(broadQueries), allResults: [], allQueryStates: [], grabbed };
     panel._sdpState = state;
+    cacheScene(sceneId, state);
 
     await runQueryBatch(panel, state, broadQueries, "No performers or title found for this scene.");
     updateActionButton(panel);
@@ -915,11 +847,11 @@ async function onSearchClick() {
 
 // Runs whichever stage the panel is currently on: Stage 1 → 2 runs
 // SECOND_PASS_QUERIES (parallel, deduped against everything already tried),
-// Stage 2 → 3 runs the single Last Chance query. Stage advances regardless
-// of whether the stage actually found anything (there's nothing further to
-// fall back to either way), so updateActionButton always reflects the new
-// stage afterwards — including hiding the button and showing the sign-off
-// message once Stage 3 is done.
+// Stage 2 → 3 runs the single Last Chance query. The stage advances before
+// it runs, so the stage label rendered during the run is already the new
+// one, and regardless of whether it finds anything (there's nothing further
+// to fall back to either way) — updateActionButton then reflects it,
+// including hiding the button and showing the sign-off after Stage 3.
 async function onTryHarderClick() {
   const panel = document.getElementById("sdp-panel");
   if (!panel || !panel._sdpState) return;
@@ -931,11 +863,11 @@ async function onTryHarderClick() {
       const queries = [...new Set(SECOND_PASS_QUERIES.map((q) => q.build(state.scene)).filter(Boolean))]
         .filter((q) => !state.triedQueries.has(q));
       queries.forEach((q) => state.triedQueries.add(q));
-      await runQueryBatch(panel, state, queries, "Nothing new to try — no parent studio or aliases available.");
       state.stage = 2;
+      await runQueryBatch(panel, state, queries, "Nothing new to try — no parent studio or aliases available.");
     } else if (state.stage === 2) {
-      await runLastChanceSearch(panel, state);
       state.stage = 3;
+      await runLastChanceSearch(panel, state);
     }
     updateActionButton(panel);
   } finally {

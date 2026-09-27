@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "stasharr",
-  "version": "1.1.0",
+  "version": "1.3.0",
   "description": "send scenes from StashDB to Prowlarr",
   "icons": {
     "48": "icons/icon.svg",
@@ -15,13 +15,13 @@
   "content_scripts": [
     {
       "matches": ["*://stashdb.org/*"],
-      "js": ["content.js"],
+      "js": ["common.js", "content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
     }
   ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": ["common.js", "background.js"]
   },
   "options_ui": {
     "page": "options.html",
@@ -33,7 +33,8 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "stasharr@brewing8309",
+      "id": "{1d52423d-161b-4351-834a-d2ba8b3747f8}",
+      "update_url": "https://raw.githubusercontent.com/brewing8309/stasharr/main/updates.json",
 	  "data_collection_permissions": {
 		"required": ["none"]
 	  }

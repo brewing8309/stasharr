@@ -129,12 +129,19 @@ fall back to, so the button retires itself and leaves a parting word in its plac
 Every release title is normalised (lowercased, punctuation stripped) and checked against five
 fixed facts about the scene:
 
-**Studio** · **Parent studio** · **Performer** (any cast member *or* one of her aliases) · **Title** · **Date**
+**Studio** · **Parent studio** · **Performer** · **Title** · **Date**
+
+- **Performer** matches on any cast member's name, the name she's credited as in this scene, or
+  any of her aliases. Short single-word aliases are skipped for scoring, because something like
+  "Mia" would match half the index.
+- **Title** matches on the whole title, or on at least 60 % of its significant words. Release
+  names often cut long titles short.
 
 Stages 1 and 2 only show releases matching **at least 2 of 5** — that's what keeps the broad
-queries usable. Every row shows its own score inline (`3/5 hits (Studio, Performer, Date)`), so
-you can see exactly why something is in the list. Within a resolution group, higher scores rank
-first, then seeders/grabs.
+queries usable. Every row shows its own score inline (`3/5 hits (Studio, Performer 2/3, Date)`),
+so you can see exactly why something is in the list. With more than one performer, the
+`2/3` tells you how much of the cast the release names. Within a resolution group, higher
+scores rank first, then releases naming more of the cast, then seeders/grabs.
 
 Every row also shows how far its Prowlarr publish date sits from the scene's release date
 (`4d from scene date`). That's **informational only** — it never feeds the score or the sort,
@@ -162,10 +169,13 @@ finds and confirms the scene; it never touches Prowlarr on its own.
 
 ## Install
 
-Firefox refuses to permanently install unsigned extensions on Release and Beta, so pick one:
+Grab the signed `stasharr-<version>.xpi` from [Releases](https://github.com/brewing8309/stasharr/releases)
+and drag it into Firefox. That's it — from 1.3.0 on it **updates itself**: Firefox periodically
+checks [`updates.json`](updates.json) in this repo and pulls newer releases like any other
+add-on. To check right away: `about:addons` → gear icon → **Check for Updates**.
 
 <details>
-<summary><b>Temporary — for trying it out</b> (gone on restart)</summary>
+<summary><b>Temporary — for trying out a branch</b> (gone on restart)</summary>
 
 1. Clone or download this repo.
 2. Open `about:debugging#/runtime/this-firefox`.
@@ -174,10 +184,12 @@ Firefox refuses to permanently install unsigned extensions on Release and Beta, 
 </details>
 
 <details>
-<summary><b>Signed — for keeping it</b> (needs a free AMO account)</summary>
+<summary><b>Signing your own build</b> (for forks)</summary>
 
-Sign it to yourself as an unlisted add-on — it never goes on the public store, and never gets
-reviewed by Mozilla:
+Firefox refuses to permanently install unsigned extensions on Release and Beta. An add-on ID can
+only ever be signed by the AMO account that owns it, so a fork first needs its own `gecko.id` in
+`manifest.json` — and its own `update_url`, or it'll keep polling this repo. Then sign it as an
+unlisted add-on, which never goes on the public store or through Mozilla's review:
 
 ```bash
 npm install --global web-ext
@@ -187,10 +199,7 @@ web-ext sign --channel=unlisted \
 ```
 
 Get the credentials at [addons.mozilla.org → Developer Hub → API Keys](https://addons.mozilla.org/developers/addon/api/key/).
-The signed `.xpi` lands in `web-ext-artifacts/`; drag it into Firefox to install permanently.
-
-The extension ships a fixed add-on ID (`stasharr@brewing8309`), so re-signing a new version
-updates the installed one instead of creating a duplicate.
+The signed `.xpi` lands in `web-ext-artifacts/`.
 
 </details>
 
@@ -213,18 +222,21 @@ Open the add-on's preferences (`about:addons` → stasharr → Preferences) and 
 
 **Test Prowlarr** and **Test Stash** verify each connection before you save.
 
-A couple of knobs are deliberately not in the UI, but are one-line edits in `content.js` if you
-want them: `MIN_SCORE` (the 2-of-5 threshold) and `LAST_CHANCE_LIMIT` (the 50-result cap on
-stage 3).
+A couple of knobs are deliberately not in the UI, but are one-line edits if you want them:
+`MIN_SCORE` in `common.js` (the 2-of-5 threshold) and `LAST_CHANCE_LIMIT` in `content.js` (the
+50-result cap on stage 3).
 
 ## Usage
 
 1. Open a scene on `stashdb.org`. If it's already in your Stash library, the badge tells you now.
 2. Hit **⬇ Search Prowlarr** (bottom right).
-3. Pick a release, hit **Download**. It turns into **✓ Sent** and stays that way — even across
-   stages — so you can't accidentally grab the same thing twice.
+3. Pick a release, hit **Download**. It turns into **✓ Sent** and stays that way — across
+   stages, new searches, other tabs and reloads, for 90 days — so you can't accidentally grab the
+   same thing twice.
 4. Nothing good? **🍆 Try Harder**, then **🍑 Last Chance...**.
 5. Curious what it actually searched for? Expand **Details** — every query, every raw result.
+6. Come back to a scene within 30 minutes and the panel picks up where you left off, without
+   querying your indexers again. **↻** in the panel header searches fresh.
 
 ## Troubleshooting
 
@@ -233,6 +245,7 @@ stage 3).
 | Panel says "Could not read scene" | Not logged into StashDB. It falls back to scraping the rendered page, which has no aliases or parent studio — log in for the good data. |
 | Every query fails instantly | Prowlarr URL or API key wrong. Hit **Test Prowlarr** in preferences. |
 | Search hangs, then errors | Requests time out after 25s by default. Usually a dead indexer in Prowlarr, or an unreachable instance — raise **Request timeout** if your indexers are just slow. |
+| Results look stale | Reopening a scene within 30 minutes restores the last search instead of re-querying. Hit **↻** in the panel header. |
 | Some queries fail, others don't | You'll get a warning banner above the results; expand **Details** to see which indexer choked. Partial results still show. |
 | Stage 3 feels like it's missing things | Raise **Result limit**. Prowlarr caps at 200 by default, and a prolific performer blows through that easily. |
 | No "already in Stash" badge | Stash URL not set, or the scene was never scraped from StashDB (matching is done on the stash-box ID StashApp records). |
@@ -244,18 +257,37 @@ No build step, no bundler, no dependencies. Clone it and it runs.
 
 ```
 manifest.json    MV2, <all_urls> + storage + contextMenus
+common.js        pure text/matching/scoring helpers, loaded ahead of both scripts below
 background.js    every cross-origin request (Prowlarr, StashApp, StashDB search),
                  configurable timeouts, context-menu registration
 content.js       injected on stashdb.org — scene resolution, query building,
-                 scoring, the 3-stage state machine, results panel
+                 the 3-stage state machine, results panel
 picker.js        injected on demand into any page for the reverse lookup panel
 content.css      shared styling for both panels
 options.html/js  preferences
+tests/           node:test suite — run with `node --test` (Node 20+, nothing to install)
 ```
 
 Content scripts can't reach cross-origin hosts, so everything network-facing lives in
 `background.js` and is reached by message passing. Credentials never leave `browser.storage.local`
 and are only ever sent to the hosts you configured yourself.
+
+### Releasing
+
+1. Bump `version` in `manifest.json`, add a `CHANGELOG.md` entry, and add an entry to
+   `updates.json` pointing at `releases/download/v<version>/stasharr-<version>.xpi`.
+   `node --test` fails until all three agree.
+2. Push a tag `v<version>` on that commit. The [Release](.github/workflows/release.yml)
+   workflow runs the tests, has Mozilla sign the build as an unlisted add-on and publishes a
+   GitHub release with `stasharr-<version>.xpi` attached and the CHANGELOG entry as notes.
+   It needs the repo secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` from
+   [AMO → API Keys](https://addons.mozilla.org/developers/addon/api/key/).
+3. Merge to `main` once the release is up. Installs read `updates.json` from `main`, so
+   publishing the release *first* means they never go looking for a file that isn't there yet.
+
+Mozilla signs each version number only once, so re-running a release that already got signed
+fails. If a run breaks after signing, take the signed `.xpi` from the run's artifacts and attach
+it to the release by hand. A release you pull after publishing needs a new version.
 
 ## License
 
