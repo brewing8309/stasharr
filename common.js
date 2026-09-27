@@ -68,13 +68,27 @@ function resolutionOf(release) {
   return m ? m[1].toLowerCase() + "p" : "other";
 }
 
-function matchesAnyPerformer(hay, scene) {
-  const aliasNames = scene.femaleAliasNames || [];
-  return (scene.females || []).some((name, i) => {
-    const alias = aliasNames[i];
-    return (name && hay.includes(normalizeForMatch(name))) ||
-      (alias && alias !== name && hay.includes(normalizeForMatch(alias)));
-  });
+// Normalized names that identify one performer in a release title. Her
+// primary name and the name she's credited as in this scene always count;
+// other aliases only if multi-word or 6+ characters, since a short alias
+// like "Mia" would substring-match unrelated releases.
+function performerNameSet(name, credited, aliases) {
+  const keys = [];
+  const add = (n) => {
+    const k = normalizeForMatch(n);
+    if (k && !keys.includes(k)) keys.push(k);
+  };
+  add(name);
+  add(credited);
+  for (const a of aliases || []) {
+    if (a && (/\s/.test(a.trim()) || normalizeForMatch(a).length >= 6)) add(a);
+  }
+  return keys;
+}
+
+// How many of the scene's female performers a release names.
+function countPerformers(hay, scene) {
+  return scene.femaleNameSets.filter((keys) => keys.some((k) => hay.includes(k))).length;
 }
 
 function matchesDate(hay, scene) {
@@ -84,14 +98,36 @@ function matchesDate(hay, scene) {
   return hay.includes(`${yyyy}${mm}${dd}`) || hay.includes(`${yyyy.slice(2)}${mm}${dd}`);
 }
 
+var TITLE_STOPWORDS = new Set([
+  "with", "from", "that", "this", "your", "into", "have", "when", "what", "they", "them", "then",
+  "there", "their", "about", "just", "will", "more", "some", "over", "were", "been", "here"
+]);
+var TITLE_MIN_OVERLAP = 0.6;
+
+function titleWords(title) {
+  const words = String(title || "").toLowerCase().split(/[^a-z0-9]+/);
+  return [...new Set(words.filter((w) => w.length >= 4 && !TITLE_STOPWORDS.has(w)))];
+}
+
+// Release names often truncate or reword long titles, so besides the whole
+// title, enough of its significant words also counts as a match.
+function matchesTitle(hay, scene) {
+  const whole = normalizeForMatch(scene.title);
+  if (!whole) return false;
+  if (hay.includes(whole)) return true;
+  const words = titleWords(scene.title);
+  return words.length > 0 && words.filter((w) => hay.includes(w)).length / words.length >= TITLE_MIN_OVERLAP;
+}
+
 // The 5 fixed criteria a release is judged against. "Performer" matches if
-// ANY female performer (or her alias) shows up — not counted per performer
-// — so the denominator stays a constant 5 regardless of cast size.
+// ANY female performer (or one of her names) shows up, so the denominator
+// stays a constant 5 regardless of cast size; how many of the cast a
+// release names only breaks ties (see sortResults).
 var CRITERIA = [
   { label: "Studio", test: (hay, scene) => !!(scene.studio && hay.includes(normalizeForMatch(scene.studio))) },
   { label: "Parent studio", test: (hay, scene) => !!(scene.parentStudio && scene.parentStudio !== scene.studio && hay.includes(normalizeForMatch(scene.parentStudio))) },
-  { label: "Performer", test: matchesAnyPerformer },
-  { label: "Title", test: (hay, scene) => !!(scene.title && hay.includes(normalizeForMatch(scene.title))) },
+  { label: "Performer", test: (hay, scene) => countPerformers(hay, scene) > 0 },
+  { label: "Title", test: matchesTitle },
   { label: "Date", test: matchesDate }
 ];
 
@@ -144,20 +180,26 @@ function sortByAgeProximity(results, scene) {
   });
 }
 
+// Resolution first; within a resolution, more matched criteria, then more
+// of the cast named, then more seeders/grabs.
 function sortResults(results, scene) {
-  const rank = (r) => {
+  const rankOf = (r) => {
     const idx = RES_ORDER.indexOf(resolutionOf(r));
     return idx === -1 ? RES_ORDER.length : idx;
   };
-  return results.slice().sort((a, b) => {
-    const ra = rank(a), rb = rank(b);
-    if (ra !== rb) return ra - rb;
-    // Within the same resolution bucket, prefer releases matching more of
-    // the scene's search criteria, then more seeders/grabs.
-    const sa = scoreRelease(a, scene), sb = scoreRelease(b, scene);
-    if (sa !== sb) return sb - sa;
-    return (b.seeders ?? b.grabs ?? 0) - (a.seeders ?? a.grabs ?? 0);
-  });
+  return results
+    .map((r) => {
+      const hay = releaseHay(r);
+      return {
+        r,
+        rank: rankOf(r),
+        score: CRITERIA.filter((c) => c.test(hay, scene)).length,
+        cast: countPerformers(hay, scene),
+        seeds: r.seeders ?? r.grabs ?? 0
+      };
+    })
+    .sort((a, b) => a.rank - b.rank || b.score - a.score || b.cast - a.cast || b.seeds - a.seeds)
+    .map((x) => x.r);
 }
 
 /* ------------------------------------------------------------------ *
@@ -193,7 +235,8 @@ function cleanSelectionText(text) {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     formatDateYYMMDD, cleanTitle, normalizeForMatch, releaseHay, mergeResults,
-    RES_ORDER, resolutionOf, matchesAnyPerformer, matchesDate, CRITERIA, MIN_SCORE,
+    RES_ORDER, resolutionOf, performerNameSet, countPerformers, matchesDate,
+    titleWords, matchesTitle, CRITERIA, MIN_SCORE,
     matchedCriteria, scoreRelease, ageDistanceDays, ageLabel, sortByAgeProximity,
     sortResults, cleanSelectionText
   };

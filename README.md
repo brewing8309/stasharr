@@ -129,12 +129,19 @@ fall back to, so the button retires itself and leaves a parting word in its plac
 Every release title is normalised (lowercased, punctuation stripped) and checked against five
 fixed facts about the scene:
 
-**Studio** · **Parent studio** · **Performer** (any cast member *or* one of her aliases) · **Title** · **Date**
+**Studio** · **Parent studio** · **Performer** · **Title** · **Date**
+
+- **Performer** matches on any cast member's name, the name she's credited as in this scene, or
+  any of her aliases. Short single-word aliases are skipped for scoring, because something like
+  "Mia" would match half the index.
+- **Title** matches on the whole title, or on at least 60 % of its significant words. Release
+  names often cut long titles short.
 
 Stages 1 and 2 only show releases matching **at least 2 of 5** — that's what keeps the broad
-queries usable. Every row shows its own score inline (`3/5 hits (Studio, Performer, Date)`), so
-you can see exactly why something is in the list. Within a resolution group, higher scores rank
-first, then seeders/grabs.
+queries usable. Every row shows its own score inline (`3/5 hits (Studio, Performer 2/3, Date)`),
+so you can see exactly why something is in the list. With more than one performer, the
+`2/3` tells you how much of the cast the release names. Within a resolution group, higher
+scores rank first, then releases naming more of the cast, then seeders/grabs.
 
 Every row also shows how far its Prowlarr publish date sits from the scene's release date
 (`4d from scene date`). That's **informational only** — it never feeds the score or the sort,

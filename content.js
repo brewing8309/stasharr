@@ -87,7 +87,7 @@ async function fetchSceneViaGraphQL(sceneId) {
       title
       date
       studio { name parent { name } }
-      performers { performer { name gender aliases } }
+      performers { performer { name gender aliases } as }
     }
   }`;
   const url = new URL("/graphql", location.origin).href;
@@ -105,14 +105,15 @@ async function fetchSceneViaGraphQL(sceneId) {
 
   const studio = scene.studio ? scene.studio.name : "";
   const parentStudio = scene.studio && scene.studio.parent ? scene.studio.parent.name : "";
-  const femalePerformers = (scene.performers || [])
-    .map((p) => p.performer)
-    .filter((p) => p && FEMALE_GENDERS.has(p.gender));
-  const females = femalePerformers.map((p) => p.name);
+  const appearances = (scene.performers || [])
+    .filter((a) => a.performer && FEMALE_GENDERS.has(a.performer.gender));
+  const females = appearances.map((a) => a.performer.name);
   // One alias per performer (their first listed one) is enough to give the
   // search cascade an alternate name to try — not every alias.
-  const femaleAliasNames = femalePerformers.map((p) => (p.aliases && p.aliases[0]) || p.name);
-  return { studio, parentStudio, females, femaleAliasNames, title: scene.title, date: scene.date || "" };
+  const femaleAliasNames = appearances.map((a) => (a.performer.aliases && a.performer.aliases[0]) || a.performer.name);
+  // Scoring, unlike querying, costs nothing per extra name, so it uses all of them.
+  const femaleNameSets = appearances.map((a) => performerNameSet(a.performer.name, a.as, a.performer.aliases));
+  return { studio, parentStudio, females, femaleAliasNames, femaleNameSets, title: scene.title, date: scene.date || "" };
 }
 
 // DOM fallback: parse the rendered scene page. StashDB renders each performer
@@ -158,7 +159,11 @@ function fetchSceneViaDOM() {
   // No aliases or parent studio available from the rendered page — the
   // alias/parent search steps will just no-op (identical to the primary
   // studio/name steps) rather than add anything here.
-  return { studio, parentStudio: "", females, femaleAliasNames: females.slice(), title: document.title, date: extractDateFromDOM() };
+  return {
+    studio, parentStudio: "", females, femaleAliasNames: females.slice(),
+    femaleNameSets: females.map((n) => performerNameSet(n, "", [])),
+    title: document.title, date: extractDateFromDOM()
+  };
 }
 
 async function resolveScene(sceneId) {
@@ -452,7 +457,9 @@ function buildResultRow(r, state) {
   const row = document.createElement("div");
   row.className = "sdp-row";
 
-  const matched = matchedCriteria(r, scene);
+  // With more than one performer, show how much of the cast the release names ("Performer 2/3").
+  const cast = scene.females.length > 1 ? ` ${countPerformers(releaseHay(r), scene)}/${scene.females.length}` : "";
+  const matched = matchedCriteria(r, scene).map((label) => (label === "Performer" ? label + cast : label));
   const meta = [];
   if (r.indexer) meta.push(r.indexer);
   if (typeof r.seeders === "number") meta.push(`${r.seeders} seeders`);

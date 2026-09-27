@@ -9,6 +9,10 @@ const scene = {
   parentStudio: "Acme Group",
   females: ["Jane Doe", "Mary Major"],
   femaleAliasNames: ["Janie D", "Mary Major"],
+  femaleNameSets: [
+    c.performerNameSet("Jane Doe", "Janie D", ["JD", "Jane Q Doe", "Janeybird"]),
+    c.performerNameSet("Mary Major", null, [])
+  ],
   title: "Weekend Getaway",
   date: "2026-09-10"
 };
@@ -69,6 +73,51 @@ test("parent studio only counts when it differs from the studio", () => {
   const same = { ...scene, parentStudio: scene.studio };
   assert.ok(!c.matchedCriteria(release("AcmeStudio.Something"), same).includes("Parent studio"));
   assert.ok(c.matchedCriteria(release("AcmeGroup.Something"), scene).includes("Parent studio"));
+});
+
+test("performerNameSet keeps primary and credited names, and only distinctive aliases", () => {
+  assert.deepEqual(
+    c.performerNameSet("Jane Doe", "Janie D", ["JD", "Mia", "Jane Q Doe", "Janeybird", "jane doe"]),
+    ["janedoe", "janied", "janeqdoe", "janeybird"]
+  );
+  assert.deepEqual(c.performerNameSet("Mia", null, []), ["mia"]);
+});
+
+test("countPerformers counts each cast member once, via any of her names", () => {
+  assert.equal(c.countPerformers(c.releaseHay(release("Unrelated")), scene), 0);
+  assert.equal(c.countPerformers(c.releaseHay(release("Jane.Doe.and.Someone")), scene), 1);
+  assert.equal(c.countPerformers(c.releaseHay(release("Janie.D.and.Jane.Doe")), scene), 1);
+  assert.equal(c.countPerformers(c.releaseHay(release("Janeybird.and.Mary.Major")), scene), 2);
+  assert.equal(c.countPerformers(c.releaseHay(release("JD.and.Nobody")), scene), 0);
+});
+
+test("the Performer criterion matches on any alias, not just the first", () => {
+  assert.ok(c.matchedCriteria(release("Acme.Jane.Q.Doe.1080p"), scene).includes("Performer"));
+});
+
+test("matchesTitle accepts the whole title or enough of its significant words", () => {
+  const long = { ...scene, title: "Jane's Big Weekend Getaway Adventure" };
+  const hay = (t) => c.releaseHay(release(t));
+  assert.deepEqual(c.titleWords(long.title), ["jane", "weekend", "getaway", "adventure"]);
+  assert.ok(c.matchesTitle(hay("Acme.Janes.Big.Weekend.Getaway.Adventure.1080p"), long), "whole title");
+  assert.ok(c.matchesTitle(hay("Acme.26.09.10.Jane.Weekend.Getaway.1080p"), long), "truncated: 3 of 4 words");
+  assert.ok(!c.matchesTitle(hay("Acme.Jane.Doe.Adventure.1080p"), long), "2 of 4 words is below 60%");
+  assert.ok(!c.matchesTitle(hay("Acme.Weekend.1080p"), { ...scene, title: "" }), "no title never matches");
+});
+
+test("matchesTitle falls back to the whole title when it has no significant words", () => {
+  const stop = { ...scene, title: "Just With Them" };
+  assert.deepEqual(c.titleWords(stop.title), []);
+  assert.ok(c.matchesTitle(c.releaseHay(release("Just.With.Them.1080p")), stop));
+  assert.ok(!c.matchesTitle(c.releaseHay(release("With.Them.1080p")), stop));
+});
+
+test("sortResults breaks score ties by how much of the cast a release names", () => {
+  const sorted = c.sortResults([
+    release("Acme.Jane.Doe.1080p", { seeders: 99 }),
+    release("Acme.Jane.Doe.Mary.Major.1080p", { seeders: 1 })
+  ], scene).map((r) => r.title);
+  assert.deepEqual(sorted, ["Acme.Jane.Doe.Mary.Major.1080p", "Acme.Jane.Doe.1080p"]);
 });
 
 test("sortResults ranks by resolution, then score, then seeders", () => {
