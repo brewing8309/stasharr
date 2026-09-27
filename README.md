@@ -213,9 +213,9 @@ Open the add-on's preferences (`about:addons` → stasharr → Preferences) and 
 
 **Test Prowlarr** and **Test Stash** verify each connection before you save.
 
-A couple of knobs are deliberately not in the UI, but are one-line edits in `content.js` if you
-want them: `MIN_SCORE` (the 2-of-5 threshold) and `LAST_CHANCE_LIMIT` (the 50-result cap on
-stage 3).
+A couple of knobs are deliberately not in the UI, but are one-line edits if you want them:
+`MIN_SCORE` in `common.js` (the 2-of-5 threshold) and `LAST_CHANCE_LIMIT` in `content.js` (the
+50-result cap on stage 3).
 
 ## Usage
 
@@ -244,13 +244,15 @@ No build step, no bundler, no dependencies. Clone it and it runs.
 
 ```
 manifest.json    MV2, <all_urls> + storage + contextMenus
+common.js        pure text/matching/scoring helpers, loaded ahead of both scripts below
 background.js    every cross-origin request (Prowlarr, StashApp, StashDB search),
                  configurable timeouts, context-menu registration
 content.js       injected on stashdb.org — scene resolution, query building,
-                 scoring, the 3-stage state machine, results panel
+                 the 3-stage state machine, results panel
 picker.js        injected on demand into any page for the reverse lookup panel
 content.css      shared styling for both panels
 options.html/js  preferences
+tests/           node:test suite — run with `node --test` (Node 20+, nothing to install)
 ```
 
 Content scripts can't reach cross-origin hosts, so everything network-facing lives in

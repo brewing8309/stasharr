@@ -1,0 +1,200 @@
+/*
+ * Pure text, matching and scoring helpers: no DOM, no browser.* APIs.
+ * Loaded ahead of content.js and background.js (see manifest.json) and
+ * required directly by the tests in tests/.
+ */
+
+// Shared values use `var`/`function` so they land on the global that the
+// scripts loaded after this one read from.
+
+// Some releases are named by date instead of studio, e.g. "26.09.10" for
+// 2026-09-10. StashDB dates come as "YYYY-MM-DD"; take the last two digits
+// of the year to match that convention.
+function formatDateYYMMDD(dateStr) {
+  const m = String(dateStr || "").match(/(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[1].slice(2)}.${m[2]}.${m[3]}` : "";
+}
+
+// Strips parenthetical asides ("(Part 2)") and punctuation from a scene
+// title before it's used as a search term — most Torznab searches treat the
+// query as required tokens, so stray punctuation/asides just narrow the
+// search for no benefit. Scoring isn't affected: it already normalizes.
+function cleanTitle(title) {
+  return String(title || "")
+    .replace(/[([{][^)\]}]*[)\]}]/g, " ")
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeForMatch(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function releaseHay(release) {
+  return normalizeForMatch(`${release.title || ""} ${release.sortTitle || ""}`);
+}
+
+// Merges Prowlarr result arrays from multiple parallel queries into one
+// list, de-duplicated by release guid (falling back to indexer+title for
+// any release missing one, which shouldn't normally happen).
+function mergeResults(resultArrays) {
+  const seen = new Set();
+  const merged = [];
+  for (const results of resultArrays) {
+    for (const r of results) {
+      const key = r.guid || `${r.indexer}|${r.title}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(r);
+    }
+  }
+  return merged;
+}
+
+/* ------------------------------------------------------------------ *
+ * Scoring and sorting                                                 *
+ * ------------------------------------------------------------------ */
+
+// Rank: 2160p first, then 1080p, then 720p, then everything else.
+var RES_ORDER = ["2160p", "1080p", "720p"];
+
+function resolutionOf(release) {
+  const hay = `${release.title || ""} ${release.sortTitle || ""}`;
+  if (/\b(2160p|4k|uhd)\b/i.test(hay)) return "2160p";
+  if (/\b1080p\b/i.test(hay)) return "1080p";
+  if (/\b720p\b/i.test(hay)) return "720p";
+  const m = hay.match(/\b(\d{3,4})p\b/i);
+  return m ? m[1].toLowerCase() + "p" : "other";
+}
+
+function matchesAnyPerformer(hay, scene) {
+  const aliasNames = scene.femaleAliasNames || [];
+  return (scene.females || []).some((name, i) => {
+    const alias = aliasNames[i];
+    return (name && hay.includes(normalizeForMatch(name))) ||
+      (alias && alias !== name && hay.includes(normalizeForMatch(alias)));
+  });
+}
+
+function matchesDate(hay, scene) {
+  const iso = String(scene.date || "").match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!iso) return false;
+  const [, yyyy, mm, dd] = iso;
+  return hay.includes(`${yyyy}${mm}${dd}`) || hay.includes(`${yyyy.slice(2)}${mm}${dd}`);
+}
+
+// The 5 fixed criteria a release is judged against. "Performer" matches if
+// ANY female performer (or her alias) shows up — not counted per performer
+// — so the denominator stays a constant 5 regardless of cast size.
+var CRITERIA = [
+  { label: "Studio", test: (hay, scene) => !!(scene.studio && hay.includes(normalizeForMatch(scene.studio))) },
+  { label: "Parent studio", test: (hay, scene) => !!(scene.parentStudio && scene.parentStudio !== scene.studio && hay.includes(normalizeForMatch(scene.parentStudio))) },
+  { label: "Performer", test: matchesAnyPerformer },
+  { label: "Title", test: (hay, scene) => !!(scene.title && hay.includes(normalizeForMatch(scene.title))) },
+  { label: "Date", test: matchesDate }
+];
+
+// A release must match at least this many of the 5 CRITERIA to be shown —
+// the broad queries in runQueryBatch can pull in a lot of noise (e.g.
+// every scene of a prolific performer), and this is what filters it back
+// out.
+var MIN_SCORE = 2;
+
+// Returns which of CRITERIA a release matches, e.g. ["Studio", "Performer",
+// "Date"] — used both for the "3/5 hits" line under each result and for the
+// MIN_SCORE filter (score = matched.length).
+function matchedCriteria(release, scene) {
+  const hay = releaseHay(release);
+  return CRITERIA.filter((c) => c.test(hay, scene)).map((c) => c.label);
+}
+
+function scoreRelease(release, scene) {
+  return matchedCriteria(release, scene).length;
+}
+
+// Stage 3 ("Last Chance") only — deliberately NOT part of CRITERIA/
+// scoreRelease, so it never affects the MIN_SCORE filter or ranking
+// anywhere else. Compares a release's Prowlarr publish date against the
+// scene's release date; the closer, the more likely it's the right scene.
+// Returns days apart, or null if either date is missing/unparseable (some
+// torrent indexers don't report a publish date at all) — callers treat
+// null as "worst"/unknown rather than crashing or scoring it as a match.
+function ageDistanceDays(release, scene) {
+  const sceneTime = Date.parse(scene.date || "");
+  const releaseTime = Date.parse(release.publishDate || "");
+  if (Number.isNaN(sceneTime) || Number.isNaN(releaseTime)) return null;
+  return Math.abs(releaseTime - sceneTime) / 86400000;
+}
+
+function ageLabel(release, scene) {
+  const days = ageDistanceDays(release, scene);
+  return days === null ? "publish date unknown" : `${Math.round(days)}d from scene date`;
+}
+
+// Closest publish date first; releases with no usable date sort last.
+function sortByAgeProximity(results, scene) {
+  return results.slice().sort((a, b) => {
+    const da = ageDistanceDays(a, scene);
+    const db = ageDistanceDays(b, scene);
+    if (da === null && db === null) return 0;
+    if (da === null) return 1;
+    if (db === null) return -1;
+    return da - db;
+  });
+}
+
+function sortResults(results, scene) {
+  const rank = (r) => {
+    const idx = RES_ORDER.indexOf(resolutionOf(r));
+    return idx === -1 ? RES_ORDER.length : idx;
+  };
+  return results.slice().sort((a, b) => {
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    // Within the same resolution bucket, prefer releases matching more of
+    // the scene's search criteria, then more seeders/grabs.
+    const sa = scoreRelease(a, scene), sb = scoreRelease(b, scene);
+    if (sa !== sb) return sb - sa;
+    return (b.seeders ?? b.grabs ?? 0) - (a.seeders ?? a.grabs ?? 0);
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * Right-click selection search                                        *
+ * ------------------------------------------------------------------ */
+
+// Selected text on an arbitrary page can be a torrent-style filename
+// ("Studio.Performer.Name.26.09.10.XXX.1080p.mp4"), a loosely structured
+// line ("[Studio] Performer - Scene Title"), or just plain free text with
+// no structure at all. Rather than trying to parse any of these into
+// separate studio/performer/title fields (fragile across formats), this
+// just normalizes everything into a flat, punctuation-free search phrase
+// and lets StashDB's own fuzzy search rank it.
+var SELECTION_NOISE_RE = /\b(1080p|720p|2160p|4k|uhd|hd|sd|x264|x265|h264|h265|hevc|avc|xvid|web ?dl|webrip|hdtv|dvdrip|bluray|brrip|xxx|nfo|proof|repack|internal|multisub|complete)\b/gi;
+
+function cleanSelectionText(text) {
+  return String(text || "")
+    .slice(0, 200)
+    // File extension, if this is actually a filename.
+    .replace(/\.(mp4|mkv|avi|wmv|mov|m4v|ts|m2ts|flv)$/i, "")
+    // Dots/underscores/hyphens/brackets/pipes are all used as separators
+    // across these formats — normalize them all to spaces instead of
+    // guessing which punctuation style is "real". This has to run before
+    // the noise-token strip below so a hyphen-glued release-group tag
+    // (e.g. "x264-GROUP") splits into separate words first, rather than
+    // leaving a dangling "-GROUP" once "x264" alone is stripped out.
+    .replace(/[-._|[\](){}]+/g, " ")
+    .replace(SELECTION_NOISE_RE, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    formatDateYYMMDD, cleanTitle, normalizeForMatch, releaseHay, mergeResults,
+    RES_ORDER, resolutionOf, matchesAnyPerformer, matchesDate, CRITERIA, MIN_SCORE,
+    matchedCriteria, scoreRelease, ageDistanceDays, ageLabel, sortByAgeProximity,
+    sortResults, cleanSelectionText
+  };
+}

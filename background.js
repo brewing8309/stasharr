@@ -263,32 +263,6 @@ async function searchStashDBScenes(term) {
   }));
 }
 
-// Selected text on an arbitrary page can be a torrent-style filename
-// ("Studio.Performer.Name.26.09.10.XXX.1080p.mp4"), a loosely structured
-// line ("[Studio] Performer - Scene Title"), or just plain free text with
-// no structure at all. Rather than trying to parse any of these into
-// separate studio/performer/title fields (fragile across formats), this
-// just normalizes everything into a flat, punctuation-free search phrase
-// and lets StashDB's own fuzzy search rank it.
-const SELECTION_NOISE_RE = /\b(1080p|720p|2160p|4k|uhd|hd|sd|x264|x265|h264|h265|hevc|avc|xvid|web ?dl|webrip|hdtv|dvdrip|bluray|brrip|xxx|nfo|proof|repack|internal|multisub|complete)\b/gi;
-
-function cleanSelectionText(text) {
-  return String(text || "")
-    .slice(0, 200)
-    // File extension, if this is actually a filename.
-    .replace(/\.(mp4|mkv|avi|wmv|mov|m4v|ts|m2ts|flv)$/i, "")
-    // Dots/underscores/hyphens/brackets/pipes are all used as separators
-    // across these formats — normalize them all to spaces instead of
-    // guessing which punctuation style is "real". This has to run before
-    // the noise-token strip below so a hyphen-glued release-group tag
-    // (e.g. "x264-GROUP") splits into separate words first, rather than
-    // leaving a dangling "-GROUP" once "x264" alone is stripped out.
-    .replace(/[-._|[\](){}]+/g, " ")
-    .replace(SELECTION_NOISE_RE, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 async function handleSelectionSearch(rawText, tabId) {
   const term = cleanSelectionText(rawText);
   let payload;
