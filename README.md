@@ -170,7 +170,7 @@ finds and confirms the scene; it never touches Prowlarr on its own.
 ## Install
 
 Grab the signed `stasharr-<version>.xpi` from [Releases](https://github.com/brewing8309/stasharr/releases)
-and drag it into Firefox. That's it — from 1.2.0 on it **updates itself**: Firefox periodically
+and drag it into Firefox. That's it — from 1.3.0 on it **updates itself**: Firefox periodically
 checks [`updates.json`](updates.json) in this repo and pulls newer releases like any other
 add-on. To check right away: `about:addons` → gear icon → **Check for Updates**.
 
@@ -277,11 +277,17 @@ and are only ever sent to the hosts you configured yourself.
 1. Bump `version` in `manifest.json`, add a `CHANGELOG.md` entry, and add an entry to
    `updates.json` pointing at `releases/download/v<version>/stasharr-<version>.xpi`.
    `node --test` fails until all three agree.
-2. Sign it: `web-ext sign --channel=unlisted …` (see [Install](#install)).
-3. Create a GitHub release tagged `v<version>` and attach the signed file, renamed to
-   `stasharr-<version>.xpi`.
-4. Merge to `main`. Installs read `updates.json` from `main`, so publishing the release *first*
-   means they never go looking for a file that isn't there yet.
+2. Push a tag `v<version>` on that commit. The [Release](.github/workflows/release.yml)
+   workflow runs the tests, has Mozilla sign the build as an unlisted add-on and publishes a
+   GitHub release with `stasharr-<version>.xpi` attached and the CHANGELOG entry as notes.
+   It needs the repo secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` from
+   [AMO → API Keys](https://addons.mozilla.org/developers/addon/api/key/).
+3. Merge to `main` once the release is up. Installs read `updates.json` from `main`, so
+   publishing the release *first* means they never go looking for a file that isn't there yet.
+
+Mozilla signs each version number only once, so re-running a release that already got signed
+fails. If a run breaks after signing, take the signed `.xpi` from the run's artifacts and attach
+it to the release by hand. A release you pull after publishing needs a new version.
 
 ## License
 

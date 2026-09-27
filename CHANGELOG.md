@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.0 — 2026-09-27
+## 1.3.0 — 2026-09-27
 
 Sharper scoring, a panel that remembers, and an extension that finally updates itself.
 
@@ -8,7 +8,7 @@ Sharper scoring, a panel that remembers, and an extension that finally updates i
 
 **Auto-updates.** Installs now check this repo for new versions and update themselves like any
 other add-on, instead of you downloading and dragging in each signed `.xpi` by hand. This kicks
-in *from* 1.2.0 on: see [Upgrading](#upgrading-from-110).
+in *from* 1.3.0 on: see [Upgrading](#upgrading-from-110).
 
 **Searches are remembered per scene.** Come back to a scene within 30 minutes and the panel
 picks up exactly where you left off — same stage, same results, same Details — without querying
@@ -45,8 +45,14 @@ catch the version, update manifest and settings drifting apart. Nothing to insta
 
 ### Upgrading from 1.1.0
 
-- **Install 1.2.0 by hand, once.** 1.1.0 and earlier don't know where to look for updates, so
-  they can't find this one. Every version after 1.2.0 arrives on its own.
+- **Install 1.3.0 by hand, once.** Earlier versions don't know where to look for updates, so
+  they can't find this one. Every version after 1.3.0 arrives on its own.
+- **It installs over your current copy, settings included.** The add-on ID is back to
+  `{1d52423d-161b-4351-834a-d2ba8b3747f8}`, the one every signed release has carried. The
+  `stasharr@brewing8309` ID from 1.1.0 was never signed, and switching to it would have made
+  Firefox treat the update as a separate add-on with empty settings.
+- **Why no 1.2.0.** The signed build in the 2026.09.19 release already reported itself as
+  1.2.0, and Mozilla signs each version number only once.
 - **No new permissions.** The remembered sent releases live in the extension's existing storage.
 
 ## 1.1.0 — 2026-09-19
