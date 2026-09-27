@@ -42,21 +42,21 @@ function currentSceneId() {
   return m ? m[1] : null;
 }
 
-let lastPath = null;
+let lastSceneId = null;
 
+// Button, badge and panel all belong to one scene, so any scene change,
+// including straight from one scene to another, clears them and starts
+// over for the new one. Sub-pages of the same scene change nothing.
 function syncButton() {
-  if (location.pathname === lastPath) return;
-  lastPath = location.pathname;
+  const sceneId = currentSceneId();
+  if (sceneId === lastSceneId) return;
+  lastSceneId = sceneId;
 
   const existing = document.getElementById("sdp-button");
-  const sceneId = currentSceneId();
-  if (sceneId) {
-    if (!existing) injectButton(sceneId);
-  } else if (existing) {
-    existing.remove();
-    hideStashBadge();
-    closePanel();
-  }
+  if (existing) existing.remove();
+  hideStashBadge();
+  closePanel();
+  if (sceneId) injectButton(sceneId);
 }
 
 // Poll for SPA navigation changes and re-evaluate whether to show the button.
@@ -643,9 +643,7 @@ async function prowlarrSearch(query) {
 
 const LOADING_HTML = `<div class="sdp-loading"><span class="sdp-spinner" role="status" aria-label="Searching…"></span></div>`;
 
-async function resolveSceneForPanel(panel) {
-  const sceneId = currentSceneId();
-  if (!sceneId) return null;
+async function resolveSceneForPanel(panel, sceneId) {
   const body = panel.querySelector(".sdp-body");
   body.innerHTML = `<div class="sdp-loading">Reading scene…</div>`;
   try {
@@ -822,6 +820,7 @@ async function onSearchClick({ fresh = false } = {}) {
   btn.disabled = true;
   try {
     const sceneId = currentSceneId();
+    if (!sceneId) return;
     const panel = ensurePanel();
     const grabbed = await loadGrabbed();
     const cached = fresh ? null : cachedScene(sceneId);
@@ -830,7 +829,8 @@ async function onSearchClick({ fresh = false } = {}) {
       return;
     }
 
-    const scene = await resolveSceneForPanel(panel);
+    // sceneId, not a fresh URL read: the user may have moved on during the awaits.
+    const scene = await resolveSceneForPanel(panel, sceneId);
     if (!scene) return;
 
     const broadQueries = [...new Set(BROAD_QUERIES.map((q) => q.build(scene)).filter(Boolean))];

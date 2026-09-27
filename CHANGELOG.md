@@ -39,6 +39,9 @@ catch the version, update manifest and settings drifting apart. Nothing to insta
 
 - The stage label above the results lagged a stage behind: after **🍆 Try Harder** it still said
   "Stage 1", and after **🍑 Last Chance...** it said "Stage 1 + 2".
+- Going straight from one scene to another (e.g. via a related scene link) kept the previous
+  scene's results panel and "Already in Stash" badge on screen, and never checked Stash for the
+  new scene — so a scene could claim to be in your library when it wasn't.
 
 ### Upgrading from 1.1.0
 
