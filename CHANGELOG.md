@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.4.0 — 2026-10-15
+
+### Added
+
+- **Her other scenes, at a glance.** With StashApp set up, a scene page shows a sidebar for each
+  of its first two female performers — the first on the right edge, the second on the left —
+  with up to 4 of her other scenes in your library, newest first, each with its thumbnail and a
+  link into Stash. If there are more, a link takes you to the performer in Stash. Performers are
+  matched by their StashDB ID, so one that isn't linked in Stash, or has no other scene there,
+  gets no sidebar. On windows narrower than 1400px the sidebars start folded to their header.
+- Thumbnails are fetched by the extension, not linked: an `http://` Stash couldn't be shown on
+  the HTTPS StashDB page, and the API key stays out of the page.
+
 ## 1.3.1 — 2026-09-27
 
 Matching fixes for names outside plain ASCII, and a round of hardening. The first release to
