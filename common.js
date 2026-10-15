@@ -225,6 +225,40 @@ function pruneGrabbed(grabbed, now, maxAgeMs) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Performer sidebars                                                  *
+ * ------------------------------------------------------------------ */
+
+// StashDB genders counted as the scene's (female) performers — for the
+// search terms and for the sidebars alike.
+var FEMALE_GENDERS = new Set(["FEMALE", "TRANSGENDER_FEMALE"]);
+
+// How many performers get a sidebar (the first on the right edge, the second
+// on the left) and how many of each one's Stash scenes it shows.
+var SIDEBAR_PERFORMERS = 2;
+var SIDEBAR_SCENES = 4;
+
+// The scene's first female performers, in StashDB's order, from findScene's
+// `performers { performer { id name gender } }`. Only those with an ID: that
+// is what Stash is asked about, not the name.
+function sidebarPerformers(appearances) {
+  const picked = [];
+  for (const a of appearances || []) {
+    const p = a && a.performer;
+    if (!p || !p.id || !FEMALE_GENDERS.has(p.gender) || picked.some((x) => x.id === p.id)) continue;
+    picked.push({ id: p.id, name: p.name || "" });
+    if (picked.length === SIDEBAR_PERFORMERS) break;
+  }
+  return picked;
+}
+
+// Stash scenes don't need a title; its own UI falls back to the file name.
+function stashSceneLabel(scene) {
+  if (scene.title) return scene.title;
+  const file = (scene.files || [])[0];
+  return (file && file.basename) || `Scene ${scene.id}`;
+}
+
+/* ------------------------------------------------------------------ *
  * Right-click selection search                                        *
  * ------------------------------------------------------------------ */
 
@@ -260,6 +294,7 @@ if (typeof module !== "undefined" && module.exports) {
     RES_ORDER, resolutionOf, performerNameSet, countPerformers, matchesDate,
     titleWords, matchesTitle, CRITERIA, MIN_SCORE,
     matchedCriteria, scoreRelease, ageDistanceDays, ageLabel, sortByAgeProximity,
-    sortResults, GRABBED_MAX_AGE_MS, pruneGrabbed, cleanSelectionText
+    sortResults, GRABBED_MAX_AGE_MS, pruneGrabbed, FEMALE_GENDERS, SIDEBAR_PERFORMERS,
+    SIDEBAR_SCENES, sidebarPerformers, stashSceneLabel, cleanSelectionText
   };
 }

@@ -145,6 +145,10 @@ async function testConnection() {
  * StashApp: check whether a StashDB scene is already downloaded       *
  * ------------------------------------------------------------------ */
 
+function stashAuthHeaders(cfg) {
+  return cfg.stashApiKey ? { "ApiKey": cfg.stashApiKey } : {};
+}
+
 async function stashFetch(query, variables) {
   const cfg = await getConfig();
   const base = normalizeBase(cfg.stashUrl);
@@ -155,7 +159,7 @@ async function stashFetch(query, variables) {
     headers: {
       "Content-Type": "application/json",
       "Accept": "application/json",
-      ...(cfg.stashApiKey ? { "ApiKey": cfg.stashApiKey } : {})
+      ...stashAuthHeaders(cfg)
     },
     body: JSON.stringify({ query, variables })
   });
@@ -224,6 +228,114 @@ async function checkStashScene(stashId) {
     resolution: heightLabel(sceneHeight(scene)),
     url: `${base}/scenes/${scene.id}`
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * StashApp: the performers' other scenes, for the sidebars shown on   *
+ * StashDB scene pages                                                 *
+ * ------------------------------------------------------------------ */
+
+// Matched by the StashDB ID Stash records when a performer is tagged from
+// StashDB, never by name: a same-named performer may be someone else.
+// stash_id_endpoint is deprecated in recent Stash in favour of
+// stash_ids_endpoint, but still served, and older instances only know it.
+async function findPerformerByStashId(stashId) {
+  const data = await stashFetch(`query FindPerformerByStashId($endpoint: String!, $stashId: String!) {
+    findPerformers(performer_filter: { stash_id_endpoint: { endpoint: $endpoint, stash_id: $stashId, modifier: EQUALS } }, filter: { per_page: 1 }) {
+      performers { id name }
+    }
+  }`, { endpoint: STASHDB_ENDPOINT, stashId });
+  return data && data.findPerformers && data.findPerformers.performers[0];
+}
+
+// Newest first. The scene being viewed is left out (it already has its own
+// badge), from the count as well as the list.
+async function findPerformerScenes(performerId, excludeSceneId) {
+  const sceneFilter = { performers: { value: [performerId], modifier: "INCLUDES" } };
+  if (excludeSceneId) sceneFilter.id = { value: Number(excludeSceneId), modifier: "NOT_EQUALS" };
+  const data = await stashFetch(`query PerformerScenes($sceneFilter: SceneFilterType!, $perPage: Int!) {
+    findScenes(scene_filter: $sceneFilter, filter: { per_page: $perPage, sort: "date", direction: DESC }) {
+      count
+      scenes { id title date files { basename } }
+    }
+  }`, { sceneFilter, perPage: SIDEBAR_SCENES });
+  return (data && data.findScenes) || { count: 0, scenes: [] };
+}
+
+// `performers` are { id, name } with StashDB IDs (see sidebarPerformers).
+// Returns one entry per performer, in the same order, or null where there's
+// nothing to show: not in Stash, no other scenes there, or the lookup failed.
+async function stashPerformerScenes(sceneStashId, performers) {
+  const cfg = await getConfig();
+  const base = normalizeBase(cfg.stashUrl);
+  if (!base) return [];
+
+  const current = await findSceneByStashId(sceneStashId).catch(() => null);
+  return Promise.all((performers || []).slice(0, SIDEBAR_PERFORMERS).map(async (p) => {
+    try {
+      const performer = await findPerformerByStashId(p.id);
+      if (!performer) return null;
+      const found = await findPerformerScenes(performer.id, current && current.id);
+      if (!found.count || !found.scenes.length) return null;
+      return {
+        name: performer.name || p.name,
+        url: `${base}/performers/${performer.id}`,
+        count: found.count,
+        scenes: found.scenes.map((s) => ({
+          id: s.id,
+          title: stashSceneLabel(s),
+          date: s.date || "",
+          url: `${base}/scenes/${s.id}`
+        }))
+      };
+    } catch (e) {
+      console.warn(`[StashDB→Prowlarr] Stash lookup for ${p.name || p.id} failed:`, e.message);
+      return null;
+    }
+  }));
+}
+
+// Screenshots are fetched here rather than linked from the page: stashdb.org
+// is HTTPS and a local Stash usually isn't (Firefox won't load that as mixed
+// content), and the API key would have to go into the URL, readable by any
+// script on stashdb.org. Scaled down, since a full-size screenshot is a few
+// hundred KB to pass to the page for a 180px wide thumbnail.
+const THUMB_WIDTH = 360;
+
+async function stashSceneThumb(sceneId) {
+  const cfg = await getConfig();
+  const base = normalizeBase(cfg.stashUrl);
+  if (!base) throw new Error("Stash URL is not configured. Open the extension options.");
+  if (!/^\d+$/.test(String(sceneId))) throw new Error(`Invalid Stash scene ID: ${sceneId}`);
+
+  const res = await fetchWithTimeout(`${base}/scene/${sceneId}/screenshot`, { headers: stashAuthHeaders(cfg) });
+  if (!res.ok) throw new Error(`Stash screenshot request failed: ${res.status} ${res.statusText}`);
+  const blob = await res.blob();
+  try {
+    return await shrinkImage(blob, THUMB_WIDTH);
+  } catch (e) {
+    return blobToDataUrl(blob);
+  }
+}
+
+async function shrinkImage(blob, width) {
+  const bitmap = await createImageBitmap(blob);
+  const scale = Math.min(1, width / bitmap.width);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+async function blobToDataUrl(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return `data:${blob.type || "image/jpeg"};base64,${btoa(binary)}`;
 }
 
 async function testStashConnection() {
@@ -341,6 +453,16 @@ browser.runtime.onMessage.addListener((msg) => {
     case "checkStash":
       return checkStashScene(msg.stashId).then(
         (scene) => ({ ok: true, scene }),
+        (err) => ({ ok: false, error: err.message })
+      );
+    case "stashPerformerScenes":
+      return stashPerformerScenes(msg.sceneStashId, msg.performers).then(
+        (performers) => ({ ok: true, performers }),
+        (err) => ({ ok: false, error: err.message })
+      );
+    case "stashSceneThumb":
+      return stashSceneThumb(msg.sceneId).then(
+        (dataUrl) => ({ ok: true, dataUrl }),
         (err) => ({ ok: false, error: err.message })
       );
     case "testStash":
