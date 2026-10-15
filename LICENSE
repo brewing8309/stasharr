@@ -10,7 +10,7 @@ Under the "Notices" section of the license below, anyone who receives any
 part of this software from you must also receive the following lines:
 
 Required Notice: Copyright 2026 brewing8309 — https://github.com/brewing8309/stasharr
-Required Notice: This software is vibecoded. It was written end to end by an AI (Claude) from natural-language prompts. No human wrote or reviewed the code by hand. It ships with no tests and no warranty.
+Required Notice: This software is vibecoded. It was written end to end by an AI (Claude) from natural-language prompts. No human wrote or reviewed the code by hand. It ships with automated tests but no warranty.
 
 
 ADDITIONAL CONDITION: VISIBLE NOTICE

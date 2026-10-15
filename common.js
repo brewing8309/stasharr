@@ -27,8 +27,22 @@ function cleanTitle(title) {
     .trim();
 }
 
+// Folds accents ("Zoë" → "zoe", release names rarely keep them) and drops
+// everything but letters and digits. Non-Latin scripts stay, so a Japanese
+// studio name doesn't normalize to "".
 function normalizeForMatch(s) {
-  return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return foldText(s).replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function foldText(s) {
+  return String(s || "").normalize("NFKD").replace(/\p{M}+/gu, "").toLowerCase().replace(/ß/g, "ss");
+}
+
+// An empty needle is in every string, so a name that normalizes to nothing
+// must never count as a match.
+function hayHas(hay, name) {
+  const needle = normalizeForMatch(name);
+  return needle !== "" && hay.includes(needle);
 }
 
 function releaseHay(release) {
@@ -105,7 +119,7 @@ var TITLE_STOPWORDS = new Set([
 var TITLE_MIN_OVERLAP = 0.6;
 
 function titleWords(title) {
-  const words = String(title || "").toLowerCase().split(/[^a-z0-9]+/);
+  const words = foldText(title).split(/[^\p{L}\p{N}]+/u);
   return [...new Set(words.filter((w) => w.length >= 4 && !TITLE_STOPWORDS.has(w)))];
 }
 
@@ -124,8 +138,8 @@ function matchesTitle(hay, scene) {
 // stays a constant 5 regardless of cast size; how many of the cast a
 // release names only breaks ties (see sortResults).
 var CRITERIA = [
-  { label: "Studio", test: (hay, scene) => !!(scene.studio && hay.includes(normalizeForMatch(scene.studio))) },
-  { label: "Parent studio", test: (hay, scene) => !!(scene.parentStudio && scene.parentStudio !== scene.studio && hay.includes(normalizeForMatch(scene.parentStudio))) },
+  { label: "Studio", test: (hay, scene) => hayHas(hay, scene.studio) },
+  { label: "Parent studio", test: (hay, scene) => scene.parentStudio !== scene.studio && hayHas(hay, scene.parentStudio) },
   { label: "Performer", test: (hay, scene) => countPerformers(hay, scene) > 0 },
   { label: "Title", test: matchesTitle },
   { label: "Date", test: matchesDate }
@@ -202,6 +216,9 @@ function sortResults(results, scene) {
     .map((x) => x.r);
 }
 
+// How long a release sent to Prowlarr keeps showing "✓ Sent".
+var GRABBED_MAX_AGE_MS = 90 * 86400000;
+
 // Returns a copy of a { guid: sentAt } map without entries older than maxAgeMs.
 function pruneGrabbed(grabbed, now, maxAgeMs) {
   return Object.fromEntries(Object.entries(grabbed || {}).filter(([, at]) => now - at < maxAgeMs));
@@ -239,10 +256,10 @@ function cleanSelectionText(text) {
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    formatDateYYMMDD, cleanTitle, normalizeForMatch, releaseHay, mergeResults,
+    formatDateYYMMDD, cleanTitle, normalizeForMatch, foldText, hayHas, releaseHay, mergeResults,
     RES_ORDER, resolutionOf, performerNameSet, countPerformers, matchesDate,
     titleWords, matchesTitle, CRITERIA, MIN_SCORE,
     matchedCriteria, scoreRelease, ageDistanceDays, ageLabel, sortByAgeProximity,
-    sortResults, pruneGrabbed, cleanSelectionText
+    sortResults, GRABBED_MAX_AGE_MS, pruneGrabbed, cleanSelectionText
   };
 }

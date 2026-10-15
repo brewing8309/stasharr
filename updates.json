@@ -5,6 +5,10 @@
         {
           "version": "1.3.0",
           "update_link": "https://github.com/brewing8309/stasharr/releases/download/v1.3.0/stasharr-1.3.0.xpi"
+        },
+        {
+          "version": "1.3.1",
+          "update_link": "https://github.com/brewing8309/stasharr/releases/download/v1.3.1/stasharr-1.3.1.xpi"
         }
       ]
     }

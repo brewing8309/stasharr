@@ -22,6 +22,29 @@ test("normalizeForMatch lowercases and drops everything but letters and digits",
   assert.equal(c.normalizeForMatch(null), "");
 });
 
+test("normalizeForMatch folds accents and keeps non-Latin scripts", () => {
+  assert.equal(c.normalizeForMatch("Zoë Doll"), c.normalizeForMatch("Zoe.Doll"));
+  assert.equal(c.normalizeForMatch("Straße"), "strasse");
+  assert.notEqual(c.normalizeForMatch("ピーチ"), "");
+});
+
+test("accented performer names match their unaccented spelling in releases", () => {
+  const s = { ...scene, femaleNameSets: [c.performerNameSet("Zoë Doll", null, [])] };
+  assert.ok(c.matchedCriteria(release("Zoe.Doll.XXX.1080p"), s).includes("Performer"));
+});
+
+test("a studio name that normalizes to nothing never matches", () => {
+  const s = { ...scene, studio: "★", parentStudio: "" };
+  assert.ok(!c.matchedCriteria(release("Anything.Else.26.09.10"), s).includes("Studio"));
+  assert.ok(!c.hayHas("anything", ""));
+});
+
+test("a non-Latin studio only matches releases that carry it", () => {
+  const s = { ...scene, studio: "ピーチ", parentStudio: "" };
+  assert.ok(!c.matchedCriteria(release("Other.Studio.26.09.10"), s).includes("Studio"));
+  assert.ok(c.matchedCriteria(release("ピーチ 26.09.10"), s).includes("Studio"));
+});
+
 test("formatDateYYMMDD matches release naming", () => {
   assert.equal(c.formatDateYYMMDD("2026-09-10"), "26.09.10");
   assert.equal(c.formatDateYYMMDD("2026-09-10T00:00:00Z"), "26.09.10");
