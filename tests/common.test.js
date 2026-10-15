@@ -171,3 +171,26 @@ test("sortByAgeProximity puts the closest publish date first and unknown dates l
   assert.equal(c.ageLabel(release("near", { publishDate: "2026-09-12" }), scene), "2d from scene date");
   assert.equal(c.ageLabel(release("none"), scene), "publish date unknown");
 });
+
+test("sidebarPerformers takes the first two female performers that have an ID, in order", () => {
+  const appearances = [
+    { performer: { id: "m1", name: "Male Lead", gender: "MALE" } },
+    { performer: { id: "f1", name: "Jane Doe", gender: "FEMALE" } },
+    { performer: { name: "No Id", gender: "FEMALE" } },
+    { performer: { id: "f1", name: "Jane Doe", gender: "FEMALE" } },
+    { performer: { id: "t1", name: "Tess", gender: "TRANSGENDER_FEMALE" } },
+    { performer: { id: "f2", name: "Third", gender: "FEMALE" } }
+  ];
+  assert.deepEqual(c.sidebarPerformers(appearances), [
+    { id: "f1", name: "Jane Doe" },
+    { id: "t1", name: "Tess" }
+  ]);
+  assert.deepEqual(c.sidebarPerformers(null), []);
+  assert.deepEqual(c.sidebarPerformers([{ performer: null }]), []);
+});
+
+test("stashSceneLabel falls back to the file name, then the scene ID", () => {
+  assert.equal(c.stashSceneLabel({ id: "7", title: "Weekend Getaway", files: [{ basename: "x.mp4" }] }), "Weekend Getaway");
+  assert.equal(c.stashSceneLabel({ id: "7", title: "", files: [{ basename: "x.mp4" }] }), "x.mp4");
+  assert.equal(c.stashSceneLabel({ id: "7", title: null, files: [] }), "Scene 7");
+});

@@ -27,11 +27,13 @@
  *
  * If a StashApp instance is configured, it also checks (via the background
  * script) whether the scene is already in that library and shows a badge
- * with its resolution and a link, above the search button.
+ * with its resolution and a link, above the search button. And for the
+ * scene's first two female performers, a sidebar on the right (first) and
+ * left (second) edge shows up to SIDEBAR_SCENES of their other scenes in
+ * Stash, with thumbnails and a link to the performer there if there are more.
  */
 
 const SCENE_RE = /^\/scenes\/([0-9a-f-]{36})/i;
-const FEMALE_GENDERS = new Set(["FEMALE", "TRANSGENDER_FEMALE"]);
 
 /* ------------------------------------------------------------------ *
  * Scene detection + button lifecycle (StashDB is a client-side SPA)   *
@@ -44,6 +46,17 @@ function currentSceneId() {
 
 let lastSceneId = null;
 
+// Declared up here, not with the rest of the sidebar code: the first
+// syncButton() below already runs before the end of this file is reached.
+// The first performer's sidebar goes on the right edge, the second's on the left.
+const SIDEBAR_SIDES = ["right", "left"];
+// Below this viewport width a sidebar would cover StashDB's own content, so
+// it starts collapsed to its header.
+const SIDEBAR_COLLAPSE_BELOW_PX = 1400;
+// Bumped on every scene change, so a lookup still in flight for the previous
+// scene (or an earlier visit to this one) can't add its sidebars late.
+let sidebarGeneration = 0;
+
 // Button, badge and panel all belong to one scene, so any scene change,
 // including straight from one scene to another, clears them and starts
 // over for the new one. Sub-pages of the same scene change nothing.
@@ -55,8 +68,12 @@ function syncButton() {
   const existing = document.getElementById("sdp-button");
   if (existing) existing.remove();
   hideStashBadge();
+  hidePerformerSidebars();
   closePanel();
-  if (sceneId) injectButton(sceneId);
+  if (sceneId) {
+    injectButton(sceneId);
+    showPerformerSidebars(sceneId);
+  }
 }
 
 // StashDB is a client-side SPA, and a content script can't hook its
@@ -94,15 +111,8 @@ function injectButton(sceneId) {
  * Scene data extraction                                               *
  * ------------------------------------------------------------------ */
 
-async function fetchSceneViaGraphQL(sceneId) {
-  const query = `query Scene($id: ID!) {
-    findScene(id: $id) {
-      title
-      date
-      studio { name parent { name } }
-      performers { performer { name gender aliases } as }
-    }
-  }`;
+// Runs a findScene query against StashDB's own API with the user's session.
+async function stashdbFindScene(query, sceneId) {
   const url = new URL("/graphql", location.origin).href;
   const res = await fetch(url, {
     method: "POST",
@@ -115,6 +125,18 @@ async function fetchSceneViaGraphQL(sceneId) {
   if (json.errors && json.errors.length) throw new Error(json.errors[0].message);
   const scene = json.data && json.data.findScene;
   if (!scene) throw new Error("Scene not found");
+  return scene;
+}
+
+async function fetchSceneViaGraphQL(sceneId) {
+  const scene = await stashdbFindScene(`query Scene($id: ID!) {
+    findScene(id: $id) {
+      title
+      date
+      studio { name parent { name } }
+      performers { performer { name gender aliases } as }
+    }
+  }`, sceneId);
 
   const studio = scene.studio ? scene.studio.name : "";
   const parentStudio = scene.studio && scene.studio.parent ? scene.studio.parent.name : "";
@@ -242,6 +264,134 @@ function showStashBadge(scene) {
   link.textContent = `✓ Already in Stash — ${scene.resolution}`;
   badge.appendChild(link);
   document.body.appendChild(badge);
+}
+
+/* ------------------------------------------------------------------ *
+ * StashApp: sidebars with the performers' other scenes                *
+ * ------------------------------------------------------------------ */
+
+function hidePerformerSidebars() {
+  sidebarGeneration++;
+  document.querySelectorAll(".sdp-sidebar").forEach((el) => el.remove());
+}
+
+async function fetchSceneAppearances(sceneId) {
+  const scene = await stashdbFindScene(`query ScenePerformers($id: ID!) {
+    findScene(id: $id) {
+      performers { performer { id name gender } }
+    }
+  }`, sceneId);
+  return scene.performers || [];
+}
+
+// Like the badge, a nice-to-have: any failure just means no sidebars, with
+// the reason in the console.
+async function showPerformerSidebars(sceneId) {
+  const generation = sidebarGeneration;
+  try {
+    const { stashUrl } = await browser.storage.local.get({ stashUrl: "" });
+    if (!String(stashUrl).trim()) return;
+
+    const performers = sidebarPerformers(await fetchSceneAppearances(sceneId));
+    if (!performers.length || generation !== sidebarGeneration) return;
+
+    const resp = await browser.runtime.sendMessage({ type: "stashPerformerScenes", sceneStashId: sceneId, performers });
+    if (!resp || !resp.ok) {
+      console.warn("[StashDB→Prowlarr] Stash performer lookup failed:", (resp && resp.error) || "unknown error");
+      return;
+    }
+    if (generation !== sidebarGeneration) return;
+    resp.performers.forEach((p, i) => {
+      if (p && SIDEBAR_SIDES[i]) renderSidebar(p, SIDEBAR_SIDES[i]);
+    });
+  } catch (e) {
+    console.warn("[StashDB→Prowlarr] Stash performer lookup failed:", e.message);
+  }
+}
+
+function newTabLink(className, href) {
+  const a = document.createElement("a");
+  a.className = className;
+  a.href = href;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  return a;
+}
+
+// Everything in here comes from Stash, so it's set as text/attributes only.
+function renderSidebar(performer, side) {
+  const bar = document.createElement("aside");
+  bar.className = `sdp-sidebar sdp-sidebar-${side}`;
+  if (window.innerWidth < SIDEBAR_COLLAPSE_BELOW_PX) bar.classList.add("sdp-collapsed");
+
+  const head = document.createElement("div");
+  head.className = "sdp-sidebar-head";
+  const name = newTabLink("sdp-sidebar-name", performer.url);
+  name.textContent = performer.name;
+  name.title = `${performer.name} in Stash`;
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "sdp-sidebar-toggle";
+  const syncToggle = () => {
+    const collapsed = bar.classList.contains("sdp-collapsed");
+    toggle.textContent = collapsed ? "+" : "–";
+    toggle.title = collapsed ? "Show scenes" : "Hide scenes";
+  };
+  toggle.addEventListener("click", () => {
+    bar.classList.toggle("sdp-collapsed");
+    syncToggle();
+  });
+  syncToggle();
+  head.append(name, toggle);
+
+  const body = document.createElement("div");
+  body.className = "sdp-sidebar-body";
+  const label = document.createElement("div");
+  label.className = "sdp-sidebar-label";
+  label.textContent = `${performer.count} other scene${performer.count === 1 ? "" : "s"} in Stash`;
+  body.appendChild(label);
+
+  for (const scene of performer.scenes) {
+    const card = newTabLink("sdp-sidebar-scene", scene.url);
+    card.title = scene.title;
+    const img = document.createElement("img");
+    img.className = "sdp-sidebar-thumb";
+    img.alt = "";
+    const title = document.createElement("span");
+    title.className = "sdp-sidebar-scene-title";
+    title.textContent = scene.title;
+    card.append(img, title);
+    if (scene.date) {
+      const date = document.createElement("span");
+      date.className = "sdp-sidebar-scene-date";
+      date.textContent = scene.date;
+      card.appendChild(date);
+    }
+    body.appendChild(card);
+    loadSidebarThumb(img, scene.id);
+  }
+
+  const rest = performer.count - performer.scenes.length;
+  if (rest > 0) {
+    const more = newTabLink("sdp-sidebar-more", performer.url);
+    more.textContent = `+${rest} more in Stash →`;
+    body.appendChild(more);
+  }
+
+  bar.append(head, body);
+  document.body.appendChild(bar);
+}
+
+// Thumbnails come through the background script (see stashSceneThumb); a
+// failed one just keeps the empty placeholder.
+async function loadSidebarThumb(img, stashSceneId) {
+  try {
+    const resp = await browser.runtime.sendMessage({ type: "stashSceneThumb", sceneId: stashSceneId });
+    if (resp && resp.ok) img.src = resp.dataUrl;
+    else console.warn("[StashDB→Prowlarr] Stash thumbnail failed:", (resp && resp.error) || "unknown error");
+  } catch (e) {
+    console.warn("[StashDB→Prowlarr] Stash thumbnail failed:", e.message);
+  }
 }
 
 function studioTerm(scene) {
