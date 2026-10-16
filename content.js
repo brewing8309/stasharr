@@ -31,6 +31,9 @@
  * scene's first two female performers, a sidebar on the right (first) and
  * left (second) edge shows up to SIDEBAR_SCENES of their other scenes in
  * Stash, with thumbnails and a link to the performer there if there are more.
+ * On every StashDB page, scene cards in lists (performer, studio, tag and
+ * search pages, the scene list) get a ✓ with the resolution when that scene
+ * is already in Stash.
  */
 
 const SCENE_RE = /^\/scenes\/([0-9a-f-]{36})/i;
@@ -50,9 +53,10 @@ let lastSceneId = null;
 // syncButton() below already runs before the end of this file is reached.
 // The first performer's sidebar goes on the right edge, the second's on the left.
 const SIDEBAR_SIDES = ["right", "left"];
-// Below this viewport width a sidebar would cover StashDB's own content, so
-// it starts collapsed to its header.
-const SIDEBAR_COLLAPSE_BELOW_PX = 1400;
+// StashDB's content spans the full width, so the two 360px sidebars always
+// cover some of it; below this viewport width they'd cover too much and
+// start collapsed to their header.
+const SIDEBAR_COLLAPSE_BELOW_PX = 1800;
 // Bumped on every scene change, so a lookup still in flight for the previous
 // scene (or an earlier visit to this one) can't add its sidebars late.
 let sidebarGeneration = 0;
@@ -79,7 +83,10 @@ function syncButton() {
 // StashDB is a client-side SPA, and a content script can't hook its
 // history.pushState. Every route change re-renders the page, though, so
 // re-check on DOM changes (at most once per frame) and on back/forward.
-// syncButton returns right away when the scene hasn't changed.
+// Link changes count too: React can reuse a scene card for another scene by
+// just updating its href.
+// syncButton returns right away when the scene hasn't changed, and
+// syncCardBadges only looks at scene cards it hasn't checked yet.
 let syncQueued = false;
 function queueSync() {
   if (syncQueued) return;
@@ -87,9 +94,10 @@ function queueSync() {
   requestAnimationFrame(() => {
     syncQueued = false;
     syncButton();
+    syncCardBadges();
   });
 }
-new MutationObserver(queueSync).observe(document.body, { childList: true, subtree: true });
+new MutationObserver(queueSync).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["href"] });
 window.addEventListener("popstate", queueSync);
 syncButton();
 
@@ -393,6 +401,157 @@ async function loadSidebarThumb(img, stashSceneId) {
     console.warn("[StashDB→Prowlarr] Stash thumbnail failed:", e.message);
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * StashApp: ✓ on StashDB's scene cards                                *
+ * ------------------------------------------------------------------ */
+
+// StashDB's scene cards, per stash-box: the grid card of the scene,
+// performer, studio and tag lists (components/sceneCard/SceneCard.tsx, a
+// `.SceneCard` whose image links to the scene) and the row on the search
+// page (pages/search/SceneCard.tsx, an `a.SearchPage-scene` around a `.card`).
+const SCENE_CARD_LINKS = ".SceneCard a.SceneCard-image[href^='/scenes/'], a.SearchPage-scene[href^='/scenes/']";
+
+// Answers are kept across StashDB's page changes, so paging back and forth
+// doesn't ask Stash again, but not for good: a scene downloaded meanwhile
+// should show up on a later visit. A failed lookup (Stash unreachable, or
+// older than 0.31) is retried sooner, but not on every re-render.
+const CARD_ANSWER_TTL_MS = 10 * 60 * 1000;
+const CARD_RETRY_MS = 60 * 1000;
+const CARD_ANSWERS_MAX = 2000;
+// Cards often render over a few frames; wait briefly to ask for all at once.
+const CARD_LOOKUP_DELAY_MS = 150;
+
+// StashDB scene ID → { scene: { url, resolution } | null, failed?, at }.
+const cardAnswers = new Map();
+const cardPending = new Set();
+const cardInFlight = new Set();
+let cardLookupTimer = null;
+let cardBadgesOn = false;
+// Bumped when the Stash settings change, so an answer from the old instance
+// that's still in flight is dropped instead of cached.
+let cardGeneration = 0;
+
+function cardAnswer(id) {
+  const entry = cardAnswers.get(id);
+  if (entry && Date.now() - entry.at < (entry.failed ? CARD_RETRY_MS : CARD_ANSWER_TTL_MS)) return entry;
+  cardAnswers.delete(id);
+  return null;
+}
+
+function rememberCardAnswer(id, entry) {
+  cardAnswers.delete(id);
+  cardAnswers.set(id, entry);
+  while (cardAnswers.size > CARD_ANSWERS_MAX) cardAnswers.delete(cardAnswers.keys().next().value);
+}
+
+// The badge sits over a grid card's image, next to its link rather than in
+// it, and at the start of a search row.
+function cardBadgeHost(link) {
+  if (link.classList.contains("SearchPage-scene")) return link.querySelector(".card");
+  return link.closest(".SceneCard-body");
+}
+
+function sceneCards() {
+  const cards = [];
+  for (const link of document.querySelectorAll(SCENE_CARD_LINKS)) {
+    const m = link.getAttribute("href").match(SCENE_RE);
+    const host = m && cardBadgeHost(link);
+    if (host) cards.push({ id: m[1], host });
+  }
+  return cards;
+}
+
+// Runs after every batch of DOM changes (see queueSync), so only from
+// callbacks, never while this file is still being evaluated. A card's host
+// remembers the scene it was checked for: React reusing a card for another
+// scene gets it checked again, while a card already done (including the
+// mutation from adding its own badge) costs nothing.
+function syncCardBadges() {
+  if (!cardBadgesOn) return;
+  const missing = [];
+  for (const { id, host } of sceneCards()) {
+    if (host.dataset.sdpStashFor === id) continue;
+    if (host.dataset.sdpStashFor) clearCard(host);
+    const answer = cardAnswer(id);
+    if (answer) markCard(host, id, answer.scene);
+    else if (!cardInFlight.has(id)) missing.push(id);
+  }
+  if (missing.length) queueCardLookups(missing);
+}
+
+function queueCardLookups(ids) {
+  ids.forEach((id) => cardPending.add(id));
+  if (!cardLookupTimer) cardLookupTimer = setTimeout(runCardLookups, CARD_LOOKUP_DELAY_MS);
+}
+
+async function runCardLookups() {
+  cardLookupTimer = null;
+  const generation = cardGeneration;
+  const ids = [...cardPending];
+  cardPending.clear();
+  ids.forEach((id) => cardInFlight.add(id));
+
+  let scenes = null;
+  try {
+    const resp = await browser.runtime.sendMessage({ type: "stashScenesByStashIds", stashIds: ids });
+    if (resp && resp.ok) scenes = resp.scenes || {};
+    else console.warn("[StashDB→Prowlarr] Stash list lookup failed:", (resp && resp.error) || "unknown error");
+  } catch (e) {
+    console.warn("[StashDB→Prowlarr] Stash list lookup failed:", e.message);
+  }
+
+  ids.forEach((id) => cardInFlight.delete(id));
+  if (generation === cardGeneration) {
+    const at = Date.now();
+    for (const id of ids) {
+      rememberCardAnswer(id, scenes ? { scene: scenes[id] || null, at } : { scene: null, failed: true, at });
+    }
+  }
+  // Also after a dropped answer: its cards were skipped as in flight meanwhile.
+  syncCardBadges();
+}
+
+function clearCard(host) {
+  delete host.dataset.sdpStashFor;
+  host.classList.remove("sdp-card-host");
+  host.querySelectorAll(":scope > .sdp-card-badge").forEach((el) => el.remove());
+}
+
+// Like the sidebars: text and attributes only, it all comes from Stash.
+function markCard(host, id, scene) {
+  host.dataset.sdpStashFor = id;
+  if (!scene) return;
+  const badge = newTabLink("sdp-card-badge", scene.url);
+  badge.textContent = `✓ ${scene.resolution || "In Stash"}`;
+  badge.title = `Already in Stash${scene.resolution ? ` — ${scene.resolution}` : ""}`;
+  // A search row is itself a link to the StashDB scene, whose clicks React
+  // Router handles at the page root: this one should only open Stash.
+  badge.addEventListener("click", (e) => e.stopPropagation());
+  host.classList.add("sdp-card-host");
+  host.appendChild(badge);
+}
+
+// On only while a Stash URL is set; changing the Stash settings starts over.
+async function updateCardBadges() {
+  const generation = ++cardGeneration;
+  try {
+    const { stashUrl } = await browser.storage.local.get({ stashUrl: "" });
+    cardBadgesOn = !!String(stashUrl).trim();
+  } catch (e) {
+    console.warn("[StashDB→Prowlarr] Could not read settings:", e.message);
+    cardBadgesOn = false;
+  }
+  if (generation !== cardGeneration) return;
+  cardAnswers.clear();
+  document.querySelectorAll("[data-sdp-stash-for]").forEach(clearCard);
+  syncCardBadges();
+}
+
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && (changes.stashUrl || changes.stashApiKey)) updateCardBadges();
+});
+updateCardBadges();
 
 function studioTerm(scene) {
   return (scene.studio || "").replace(/\s+/g, "");

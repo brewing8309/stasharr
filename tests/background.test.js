@@ -66,7 +66,7 @@ test("a failed grab is not remembered", async () => {
 
 // A Stash GraphQL server stub: answers by which query was sent and records
 // every request, so tests can check the filters the background script used.
-function stashStub({ currentScene, performers = {}, scenes = {} }) {
+function stashStub({ currentScene, performers = {}, scenes = {}, byStashId = [] }) {
   const requests = [];
   const fetch = async (url, options = {}) => {
     const body = options.body ? JSON.parse(options.body) : null;
@@ -78,6 +78,9 @@ function stashStub({ currentScene, performers = {}, scenes = {} }) {
     if (body.query.includes("findPerformers")) {
       const p = performers[body.variables.stashId];
       data = { findPerformers: { performers: p ? [p] : [] } };
+    } else if (body.query.includes("ScenesByStashIds")) {
+      const wanted = body.variables.stashIds;
+      data = { findScenes: { scenes: byStashId.filter((sc) => sc.stash_ids.some((sid) => wanted.includes(sid.stash_id))) } };
     } else if (body.query.includes("PerformerScenes")) {
       const id = body.variables.sceneFilter.performers.value[0];
       data = { findScenes: scenes[id] || { count: 0, scenes: [] } };
@@ -177,4 +180,59 @@ test("thumbnails only accept numeric Stash scene IDs", async () => {
   const resp = await send({ type: "stashSceneThumb", sceneId: "../../graphql" });
   assert.equal(resp.ok, false);
   assert.equal(stub.requests.length, 0);
+});
+
+const STASHDB = "https://stashdb.org/graphql";
+
+test("scene cards: one query finds which StashDB scenes are in Stash", async () => {
+  const stub = stashStub({
+    byStashId: [
+      { id: "1", files: [{ width: 1920, height: 1080 }], stash_ids: [{ endpoint: STASHDB, stash_id: "a" }] },
+      // Matched via another stash-box's ID only: not a StashDB match.
+      { id: "2", files: [], stash_ids: [{ endpoint: "https://theporndb.net/graphql", stash_id: "b" }] },
+      // Carries a requested and an unrequested StashDB ID; only the requested one counts.
+      { id: "3", files: [], stash_ids: [{ endpoint: STASHDB, stash_id: "c" }, { endpoint: STASHDB, stash_id: "zzz" }] }
+    ]
+  });
+  const { send } = loadBackground({ fetch: stub.fetch, settings: stashSettings });
+  const resp = await send({ type: "stashScenesByStashIds", stashIds: ["a", "b", "c", "d", "a", "", null] });
+
+  assert.deepEqual(resp, {
+    ok: true,
+    scenes: {
+      a: { url: "http://stash:9999/scenes/1", resolution: "1080p" },
+      c: { url: "http://stash:9999/scenes/3", resolution: "" }
+    }
+  });
+  assert.equal(stub.requests.length, 1);
+  const { query, variables } = stub.requests[0].body;
+  // stash_ids_endpoint only accepts EQUALS (any of the IDs), not INCLUDES.
+  assert.match(query, /stash_ids_endpoint: \{ endpoint: \$endpoint, stash_ids: \$stashIds, modifier: EQUALS \}/);
+  assert.match(query, /per_page: -1/);
+  assert.deepEqual(variables, { endpoint: STASHDB, stashIds: ["a", "b", "c", "d"] });
+  assert.equal(stub.requests[0].headers.ApiKey, "secret");
+});
+
+test("scene cards: long lists are asked for in batches of 100", async () => {
+  const stub = stashStub({});
+  const { send } = loadBackground({ fetch: stub.fetch, settings: stashSettings });
+  const ids = Array.from({ length: 250 }, (_, i) => `id-${i}`);
+  const resp = await send({ type: "stashScenesByStashIds", stashIds: ids });
+  assert.deepEqual(resp, { ok: true, scenes: {} });
+  assert.deepEqual(stub.requests.map((r) => r.body.variables.stashIds.length), [100, 100, 50]);
+});
+
+test("scene cards: without a Stash URL nothing is asked", async () => {
+  const stub = stashStub({});
+  const { send } = loadBackground({ fetch: stub.fetch });
+  assert.deepEqual(await send({ type: "stashScenesByStashIds", stashIds: ["a"] }), { ok: true, scenes: {} });
+  assert.equal(stub.requests.length, 0);
+});
+
+test("scene cards: a Stash too old for stash_ids_endpoint reports its error", async () => {
+  const fetch = async () => ok(JSON.stringify({ errors: [{ message: 'Field "stash_ids_endpoint" is not defined by type "SceneFilterType".' }] }));
+  const { send } = loadBackground({ fetch, settings: stashSettings });
+  const resp = await send({ type: "stashScenesByStashIds", stashIds: ["a"] });
+  assert.equal(resp.ok, false);
+  assert.match(resp.error, /stash_ids_endpoint/);
 });

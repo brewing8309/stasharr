@@ -298,9 +298,10 @@ async function stashPerformerScenes(sceneStashId, performers) {
 // Screenshots are fetched here rather than linked from the page: stashdb.org
 // is HTTPS and a local Stash usually isn't (Firefox won't load that as mixed
 // content), and the API key would have to go into the URL, readable by any
-// script on stashdb.org. Scaled down, since a full-size screenshot is a few
-// hundred KB to pass to the page for a 180px wide thumbnail.
-const THUMB_WIDTH = 360;
+// script on stashdb.org. Scaled down to twice the 360px the sidebar shows
+// them at (sharp on HiDPI screens), since a full-size screenshot is a few
+// hundred KB to pass to the page.
+const THUMB_WIDTH = 720;
 
 async function stashSceneThumb(sceneId) {
   const cfg = await getConfig();
@@ -336,6 +337,50 @@ async function blobToDataUrl(blob) {
     binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   }
   return `data:${blob.type || "image/jpeg"};base64,${btoa(binary)}`;
+}
+
+/* ------------------------------------------------------------------ *
+ * StashApp: which scenes of a StashDB list are already in the         *
+ * library, for the ✓ on StashDB's scene cards                         *
+ * ------------------------------------------------------------------ */
+
+// One query per this many IDs. A StashDB list page shows far fewer.
+const STASH_ID_BATCH = 100;
+
+// StashDB scene IDs → { [stashDbId]: { url, resolution } } for those in
+// Stash; IDs that aren't are simply absent. stash_ids_endpoint takes a list
+// and, with EQUALS, matches a scene carrying any of them (INCLUDES is
+// rejected for it). It needs Stash 0.31 or newer; older instances answer
+// with a GraphQL error, which ends up as the message's error.
+async function stashScenesByStashIds(stashIds) {
+  const cfg = await getConfig();
+  const base = normalizeBase(cfg.stashUrl);
+  if (!base) return {};
+
+  const wanted = [...new Set((stashIds || []).filter((id) => typeof id === "string" && id))];
+  const found = {};
+  for (let i = 0; i < wanted.length; i += STASH_ID_BATCH) {
+    const batch = new Set(wanted.slice(i, i + STASH_ID_BATCH));
+    const data = await stashFetch(`query ScenesByStashIds($endpoint: String!, $stashIds: [String!]!) {
+      findScenes(scene_filter: { stash_ids_endpoint: { endpoint: $endpoint, stash_ids: $stashIds, modifier: EQUALS } }, filter: { per_page: -1 }) {
+        scenes { id files { height width } stash_ids { endpoint stash_id } }
+      }
+    }`, { endpoint: STASHDB_ENDPOINT, stashIds: [...batch] });
+    for (const scene of (data && data.findScenes && data.findScenes.scenes) || []) {
+      const height = sceneHeight(scene);
+      for (const sid of scene.stash_ids || []) {
+        // A scene can carry IDs from other stash-boxes, or several StashDB
+        // ones after a merge; only the requested StashDB IDs count, and the
+        // first scene found for an ID wins.
+        if (sid.endpoint !== STASHDB_ENDPOINT || !batch.has(sid.stash_id) || found[sid.stash_id]) continue;
+        found[sid.stash_id] = {
+          url: `${base}/scenes/${scene.id}`,
+          resolution: height ? heightLabel(height) : ""
+        };
+      }
+    }
+  }
+  return found;
 }
 
 async function testStashConnection() {
@@ -463,6 +508,11 @@ browser.runtime.onMessage.addListener((msg) => {
     case "stashSceneThumb":
       return stashSceneThumb(msg.sceneId).then(
         (dataUrl) => ({ ok: true, dataUrl }),
+        (err) => ({ ok: false, error: err.message })
+      );
+    case "stashScenesByStashIds":
+      return stashScenesByStashIds(msg.stashIds).then(
+        (scenes) => ({ ok: true, scenes }),
         (err) => ({ ok: false, error: err.message })
       );
     case "testStash":

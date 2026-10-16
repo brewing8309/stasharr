@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.5.0 — 2026-10-16
+
+### Added
+
+- **✓ on every scene card you already have.** Performer, studio, tag and search pages, and the
+  scene list, mark each scene that's in your Stash with a **✓** and its resolution (**✓ 1080p**,
+  or **✓ In Stash** if Stash doesn't know it). A click on the mark opens the scene in Stash; the
+  rest of the card still goes to StashDB. All cards of a page are looked up in one request,
+  answers are kept for 10 minutes while you page around, and a Stash that's down is asked again
+  only once a minute. Needs Stash 0.31 or newer, which can look up a list of StashDB IDs at once.
+
+### Changed
+
+- **The performer sidebars are twice as wide** (360px), with thumbnails to match and slightly
+  larger text. Since they now cover more of StashDB, they start folded below 1800px window width
+  (was 1400px).
+
 ## 1.4.0 — 2026-10-15
 
 ### Added
