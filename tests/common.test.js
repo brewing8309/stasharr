@@ -194,3 +194,12 @@ test("stashSceneLabel falls back to the file name, then the scene ID", () => {
   assert.equal(c.stashSceneLabel({ id: "7", title: "", files: [{ basename: "x.mp4" }] }), "x.mp4");
   assert.equal(c.stashSceneLabel({ id: "7", title: null, files: [] }), "Scene 7");
 });
+
+test("stashMarkerPattern: the Stash host for any port; nothing for a missing or odd URL", () => {
+  assert.equal(c.stashMarkerPattern("http://192.168.1.10:9999"), "http://192.168.1.10/*");
+  assert.equal(c.stashMarkerPattern(" https://stash.example.org/stash/ "), "https://stash.example.org/*");
+  assert.equal(c.stashMarkerPattern(""), null);
+  assert.equal(c.stashMarkerPattern("localhost:9999"), null, "no scheme: not a URL Firefox can match");
+  assert.equal(c.stashMarkerPattern("ftp://host"), null);
+  assert.equal(c.AUTO_SEARCH_HASH, "#stasharr-search");
+});

@@ -383,6 +383,38 @@ async function stashScenesByStashIds(stashIds) {
   return found;
 }
 
+/* ------------------------------------------------------------------ *
+ * StashApp: let Stash pages know stasharr is here (stash-marker.js),  *
+ * so Stashboard can offer its download buttons                        *
+ * ------------------------------------------------------------------ */
+
+let stashMarker = null;
+let stashMarkerUpdates = Promise.resolve();
+
+// Re-registered whenever the Stash URL changes, one update at a time so two
+// quick changes can't leave the old registration behind.
+function updateStashMarker() {
+  stashMarkerUpdates = stashMarkerUpdates.then(async () => {
+    if (stashMarker) {
+      await stashMarker.unregister();
+      stashMarker = null;
+    }
+    const pattern = stashMarkerPattern((await getConfig()).stashUrl);
+    if (!pattern || !browser.contentScripts) return;
+    stashMarker = await browser.contentScripts.register({
+      matches: [pattern],
+      js: [{ file: "stash-marker.js" }],
+      runAt: "document_idle"
+    });
+  }).catch((e) => console.warn("[StashDB→Prowlarr] Could not register the Stash page marker:", e.message));
+  return stashMarkerUpdates;
+}
+
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.stashUrl) updateStashMarker();
+});
+updateStashMarker();
+
 async function testStashConnection() {
   const data = await stashFetch(`query { version { version } }`, {});
   return { version: data && data.version && data.version.version };

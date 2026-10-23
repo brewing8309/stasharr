@@ -77,7 +77,25 @@ function syncButton() {
   if (sceneId) {
     injectButton(sceneId);
     showPerformerSidebars(sceneId);
+    // Stashboard's download buttons link here with AUTO_SEARCH_HASH: open
+    // the panel and search right away. Searching is all it does; grabbing
+    // a release still takes a click.
+    // A tick later: on page load this runs before the rest of this file
+    // (and the constants the search uses) has been evaluated.
+    if (location.hash === AUTO_SEARCH_HASH) {
+      dropAutoSearchHash();
+      setTimeout(() => onSearchClick(), 0);
+    }
   }
+}
+
+// So a reload doesn't search again. In Firefox through the page's own
+// history object, so the router's state object stays the page's.
+function dropAutoSearchHash() {
+  const pageHistory = window.wrappedJSObject ? window.wrappedJSObject.history : history;
+  try {
+    pageHistory.replaceState(pageHistory.state, "", location.pathname + location.search);
+  } catch (e) { /* the hash just stays */ }
 }
 
 // StashDB is a client-side SPA, and a content script can't hook its
