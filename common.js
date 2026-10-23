@@ -259,6 +259,29 @@ function stashSceneLabel(scene) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Links from Stash (Stashboard)                                       *
+ * ------------------------------------------------------------------ */
+
+// A StashDB scene link ending in this opens the panel and searches right
+// away — what Stashboard's download buttons link to.
+var AUTO_SEARCH_HASH = "#stasharr-search";
+
+// The match pattern for stash-marker.js, which tells Stash pages (e.g.
+// Stashboard) that stasharr is installed. Host only: Firefox match patterns
+// can't hold a port (bug 1362809) and match any, so stash-marker.js checks
+// the exact origin itself.
+function stashMarkerPattern(stashUrl) {
+  let url;
+  try {
+    url = new URL(String(stashUrl || "").trim());
+  } catch (e) {
+    return null;
+  }
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || !url.hostname) return null;
+  return `${url.protocol}//${url.hostname}/*`;
+}
+
+/* ------------------------------------------------------------------ *
  * Right-click selection search                                        *
  * ------------------------------------------------------------------ */
 
@@ -295,6 +318,7 @@ if (typeof module !== "undefined" && module.exports) {
     titleWords, matchesTitle, CRITERIA, MIN_SCORE,
     matchedCriteria, scoreRelease, ageDistanceDays, ageLabel, sortByAgeProximity,
     sortResults, GRABBED_MAX_AGE_MS, pruneGrabbed, FEMALE_GENDERS, SIDEBAR_PERFORMERS,
-    SIDEBAR_SCENES, sidebarPerformers, stashSceneLabel, cleanSelectionText
+    SIDEBAR_SCENES, sidebarPerformers, stashSceneLabel, AUTO_SEARCH_HASH, stashMarkerPattern,
+    cleanSelectionText
   };
 }

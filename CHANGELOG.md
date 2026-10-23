@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.0 — 2026-10-23
+
+### Added
+
+- **Download from Stashboard.** [Stashboard](https://github.com/brewing8309/stashboard), a
+  dashboard for Stash's front page, can now offer **⬇ Download** on its StashDB tiles: a click
+  opens the scene on StashDB with the panel open and the search already running. For that,
+  stasharr marks your Stash page — only on the exact Stash URL from the options — so Stashboard
+  knows it's installed.
+- **Links that start the search.** A StashDB scene link ending in `#stasharr-search` opens with
+  the search running. It only searches; sending a release to Prowlarr still takes your click.
+
 ## 1.5.0 — 2026-10-16
 
 ### Added

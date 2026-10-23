@@ -49,6 +49,7 @@ This does that for you, and then some:
 | **"Already have it"** | If you run StashApp, scenes already in your library get a badge with their resolution and a link — before you search anything. |
 | **✓ in every list** | Scene cards on performer, studio, tag and search pages carry a **✓ 1080p** (or whatever you have) when that scene is already in your Stash — one request per page, and a click on it opens the scene in Stash. Needs Stash 0.31 or newer. |
 | **Her other scenes** | With StashApp set up, the scene's first two performers each get a sidebar — right edge, then left — with up to 4 of their other scenes in your library, thumbnails included, and a link to the performer in Stash when there are more. |
+| **Download from Stashboard** | With [Stashboard](https://github.com/brewing8309/stashboard) on your Stash front page, its StashDB tiles get a **⬇ Download** button: it opens the scene on StashDB and starts the search right away. |
 | **Reverse lookup** | Select *any* text anywhere in the browser → right-click → **Search StashDB** to find the scene that text belongs to. |
 | **Full transparency** | A **Details** pane shows every query fired, live, with each one's own raw unfiltered results. No black box. |
 
@@ -149,6 +150,18 @@ Every row also shows how far its Prowlarr publish date sits from the scene's rel
 (`4d from scene date`). That's **informational only** — it never feeds the score or the sort,
 except in stage 3, where it *is* the sort.
 
+### Download from Stashboard
+
+[Stashboard](https://github.com/brewing8309/stashboard), a front page dashboard for Stash, shows
+StashDB rows — trending, new from your favourites — next to your library. With stasharr installed
+and your Stash URL set, every StashDB tile you don't have yet gets **⬇ Download**: it opens the
+scene on StashDB with the panel already open and Stage 1 running. You still pick the release.
+
+How they find each other: stasharr marks your Stash page (only the exact Stash URL from the
+options) so Stashboard knows to show the button, and any link to a StashDB scene ending in
+`#stasharr-search` opens with the search started. That link only ever starts a search; sending
+a release to Prowlarr always takes your click.
+
 ### Reverse lookup
 
 Found a filename in a forum post, a release tracker, or a chat log and want to know which scene it
@@ -219,7 +232,7 @@ Open the add-on's preferences (`about:addons` → stasharr → Preferences) and 
 | **Search categories** | `6000` | no | Newznab/Torznab category IDs, comma-separated. `6000` = XXX. Empty = all. |
 | **Result limit** | `200` | no | Max releases Prowlarr returns per query. Raise it if stage 3 seems to be missing hits for a prolific performer. |
 | **Request timeout** | `25` | no | Seconds to wait for Prowlarr, Stash or StashDB before giving up. Raise it if slow indexers keep timing out. |
-| **Stash URL** | — | no | Your own StashApp, e.g. `http://localhost:9999`. Enables the "already in your library" badge, the performer sidebars and the ✓ on scene cards. |
+| **Stash URL** | — | no | Your own StashApp, e.g. `http://localhost:9999`. Enables the "already in your library" badge, the performer sidebars, the ✓ on scene cards and Stashboard's download buttons. |
 | **Stash API key** | — | no | Only if your Stash requires one. |
 
 **Test Prowlarr** and **Test Stash** verify each connection before you save.

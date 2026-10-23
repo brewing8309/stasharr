@@ -12,6 +12,9 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 function loadBackground({ fetch, settings = {} }) {
   const store = { prowlarrUrl: "http://prowlarr", apiKey: "key", ...settings };
   let onMessage;
+  const storageListeners = [];
+  // Content scripts registered through browser.contentScripts, live ones only.
+  const registered = [];
   const browser = {
     storage: {
       local: {
@@ -22,8 +25,19 @@ function loadBackground({ fetch, settings = {} }) {
         },
         async set(values) {
           await tick();
+          const changes = Object.fromEntries(Object.keys(values).map((k) => [k, { oldValue: store[k], newValue: values[k] }]));
           Object.assign(store, JSON.parse(JSON.stringify(values)));
+          storageListeners.forEach((fn) => fn(changes, "local"));
         }
+      },
+      onChanged: { addListener: (fn) => storageListeners.push(fn) }
+    },
+    contentScripts: {
+      async register(options) {
+        await tick();
+        const entry = { options: JSON.parse(JSON.stringify(options)) };
+        registered.push(entry);
+        return { unregister: async () => { registered.splice(registered.indexOf(entry), 1); } };
       }
     },
     contextMenus: { create() {}, onClicked: { addListener() {} } },
@@ -31,14 +45,18 @@ function loadBackground({ fetch, settings = {} }) {
     tabs: {}
   };
   const context = vm.createContext({
-    browser, fetch, console, setTimeout, clearTimeout, AbortController, URLSearchParams, btoa
+    browser, fetch, console, setTimeout, clearTimeout, AbortController, URL, URLSearchParams, btoa
   });
   for (const file of ["common.js", "background.js"]) {
     vm.runInContext(fs.readFileSync(path.join(root, file), "utf8"), context, { filename: file });
   }
   // Message replies reach the caller as a copy (structured clone), not as
   // objects from the background script's own realm.
-  return { store, send: async (msg) => JSON.parse(JSON.stringify(await onMessage(msg))) };
+  return {
+    store, registered, browser,
+    send: async (msg) => JSON.parse(JSON.stringify(await onMessage(msg))),
+    settle: async () => { for (let i = 0; i < 30; i++) await tick(); }
+  };
 }
 
 const ok = (body = "") => ({ ok: true, status: 200, statusText: "OK", text: async () => body });
@@ -235,4 +253,50 @@ test("scene cards: a Stash too old for stash_ids_endpoint reports its error", as
   const resp = await send({ type: "stashScenesByStashIds", stashIds: ["a"] });
   assert.equal(resp.ok, false);
   assert.match(resp.error, /stash_ids_endpoint/);
+});
+
+test("the Stash page marker is registered for the Stash host, and follows the Stash URL", async () => {
+  const bg = loadBackground({ fetch: async () => ok(), settings: { stashUrl: "http://192.168.1.10:9999/" } });
+  await bg.settle();
+  assert.deepEqual(bg.registered.map((r) => r.options), [
+    { matches: ["http://192.168.1.10/*"], js: [{ file: "stash-marker.js" }], runAt: "document_idle" }
+  ]);
+  await bg.browser.storage.local.set({ stashUrl: "https://stash.example.org" });
+  await bg.browser.storage.local.set({ stashUrl: "https://stash2.example.org" });
+  await bg.settle();
+  assert.deepEqual(bg.registered.map((r) => r.options.matches), [["https://stash2.example.org/*"]], "only the latest, the old ones are gone");
+  await bg.browser.storage.local.set({ stashUrl: "" });
+  await bg.settle();
+  assert.equal(bg.registered.length, 0);
+});
+
+test("without a Stash URL no marker is registered", async () => {
+  const bg = loadBackground({ fetch: async () => ok() });
+  await bg.settle();
+  assert.equal(bg.registered.length, 0);
+});
+
+function runMarker({ stashUrl, origin }) {
+  const attributes = {};
+  const events = [];
+  const context = vm.createContext({
+    browser: {
+      storage: { local: { get: async (d) => ({ ...d, stashUrl }) } },
+      runtime: { getManifest: () => ({ version: "9.9.9" }) }
+    },
+    location: { origin },
+    document: { documentElement: { setAttribute: (k, v) => { attributes[k] = v; } } },
+    window: { dispatchEvent: (e) => events.push(e.type) },
+    CustomEvent: class { constructor(type) { this.type = type; } },
+    URL
+  });
+  vm.runInContext(fs.readFileSync(path.join(root, "stash-marker.js"), "utf8"), context);
+  return new Promise((resolve) => setTimeout(() => resolve({ attributes, events }), 10));
+}
+
+test("stash-marker.js marks only the exact Stash origin, port included", async () => {
+  assert.deepEqual(await runMarker({ stashUrl: "http://192.168.1.10:9999", origin: "http://192.168.1.10:9999" }),
+    { attributes: { "data-stasharr": "9.9.9" }, events: ["stasharr:ready"] });
+  assert.deepEqual(await runMarker({ stashUrl: "http://192.168.1.10:9999", origin: "http://192.168.1.10:8080" }), { attributes: {}, events: [] });
+  assert.deepEqual(await runMarker({ stashUrl: "", origin: "http://192.168.1.10:9999" }), { attributes: {}, events: [] });
 });
