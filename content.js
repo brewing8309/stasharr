@@ -368,13 +368,18 @@ function renderSidebar(performer, side) {
     syncToggle();
   });
   syncToggle();
-  head.append(name, toggle);
+  head.append(name);
+  const radar = radarButton(performer);
+  if (radar) head.append(radar);
+  head.append(toggle);
 
   const body = document.createElement("div");
   body.className = "sdp-sidebar-body";
   const label = document.createElement("div");
   label.className = "sdp-sidebar-label";
-  label.textContent = `${performer.count} other scene${performer.count === 1 ? "" : "s"} in Stash`;
+  label.textContent = performer.count
+    ? `${performer.count} other scene${performer.count === 1 ? "" : "s"} in Stash`
+    : "No other scenes in Stash";
   body.appendChild(label);
 
   for (const scene of performer.scenes) {
@@ -406,6 +411,41 @@ function renderSidebar(performer, side) {
 
   bar.append(head, body);
   document.body.appendChild(bar);
+}
+
+// 📡 in a sidebar's header: puts the performer on Stashboard's radar (or
+// takes them off), so its front page shows more of them. Not offered for
+// favourites, unless one is on the radar anyway.
+function radarButton(performer) {
+  if (!performer.id || (performer.favorite && !performer.radar)) return null;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "sdp-sidebar-radar";
+  button.textContent = "📡";
+  let since = performer.radar;
+  const show = (error) => {
+    button.classList.toggle("sdp-on", !!since);
+    button.classList.toggle("sdp-error", !!error);
+    button.setAttribute("aria-pressed", since ? "true" : "false");
+    if (error) button.title = `Couldn't change the radar: ${error}`;
+    else if (since) button.title = `On your Stashboard radar since ${since}. Click to take ${performer.name} off.`;
+    else button.title = `Put ${performer.name} on your Stashboard radar: not a favourite, but more of them on your Stash front page`;
+  };
+  show(null);
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    let error = null;
+    try {
+      const resp = await browser.runtime.sendMessage({ type: "stashRadar", performerId: performer.id, on: !since });
+      if (resp && resp.ok) since = resp.radar;
+      else error = (resp && resp.error) || "unknown error";
+    } catch (e) {
+      error = e.message;
+    }
+    button.disabled = false;
+    show(error);
+  });
+  return button;
 }
 
 // Thumbnails come through the background script (see stashSceneThumb); a

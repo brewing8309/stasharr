@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.0 — 2026-10-27
+
+### Added
+
+- **📡 in the performer sidebars.** Puts the performer on
+  [Stashboard](https://github.com/brewing8309/stashboard)'s radar (or takes them off): not a
+  favourite, but a "More from …" row for them on your Stash front page. Sets or removes only the
+  performer's `radar` custom field in Stash, the same one Stashboard uses. Not shown for
+  favourites.
+
+### Changed
+
+- **A performer with no other scenes in your Stash gets a small sidebar too**, saying so, so the
+  📡 is there for someone you've only just discovered.
+
 ## 1.6.0 — 2026-10-23
 
 ### Added

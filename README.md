@@ -50,6 +50,7 @@ This does that for you, and then some:
 | **✓ in every list** | Scene cards on performer, studio, tag and search pages carry a **✓ 1080p** (or whatever you have) when that scene is already in your Stash — one request per page, and a click on it opens the scene in Stash. Needs Stash 0.31 or newer. |
 | **Her other scenes** | With StashApp set up, the scene's first two performers each get a sidebar — right edge, then left — with up to 4 of their other scenes in your library, thumbnails included, and a link to the performer in Stash when there are more. |
 | **Download from Stashboard** | With [Stashboard](https://github.com/brewing8309/stashboard) on your Stash front page, its StashDB tiles get a **⬇ Download** button: it opens the scene on StashDB and starts the search right away. |
+| **📡 Radar** | A 📡 in each performer sidebar puts them on Stashboard's radar: more of them on your Stash front page, short of a favourite. |
 | **Reverse lookup** | Select *any* text anywhere in the browser → right-click → **Search StashDB** to find the scene that text belongs to. |
 | **Full transparency** | A **Details** pane shows every query fired, live, with each one's own raw unfiltered results. No black box. |
 
@@ -161,6 +162,15 @@ How they find each other: stasharr marks your Stash page (only the exact Stash U
 options) so Stashboard knows to show the button, and any link to a StashDB scene ending in
 `#stasharr-search` opens with the search started. That link only ever starts a search; sending
 a release to Prowlarr always takes your click.
+
+### 📡 Stashboard's radar
+
+The performer sidebars have a **📡** in their header: it puts the performer on
+[Stashboard](https://github.com/brewing8309/stashboard)'s radar — not a favourite, but a
+**More from …** row for them on your Stash front page, with their unwatched scenes and the StashDB
+ones you're missing. Click again to take them off. It writes one thing, the performer's `radar`
+custom field in Stash (the day you set it), the same field Stashboard's own 📡 uses. A performer
+gets a sidebar for this even with no other scenes in your Stash yet; favourites don't get a 📡.
 
 ### Reverse lookup
 

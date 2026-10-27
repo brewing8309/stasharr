@@ -203,3 +203,11 @@ test("stashMarkerPattern: the Stash host for any port; nothing for a missing or 
   assert.equal(c.stashMarkerPattern("ftp://host"), null);
   assert.equal(c.AUTO_SEARCH_HASH, "#stasharr-search");
 });
+
+test("radar: the shared custom field, read and dated in local time", () => {
+  assert.equal(c.RADAR_FIELD, "radar");
+  assert.equal(c.radarSince({ radar: "2026-10-27" }), "2026-10-27");
+  assert.equal(c.radarSince({ radar: "soon" }), null);
+  assert.equal(c.radarSince(null), null);
+  assert.equal(c.localIsoDate(new Date(2026, 0, 5, 23, 30)), "2026-01-05");
+});
