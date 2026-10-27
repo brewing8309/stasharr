@@ -242,7 +242,7 @@ async function checkStashScene(stashId) {
 async function findPerformerByStashId(stashId) {
   const data = await stashFetch(`query FindPerformerByStashId($endpoint: String!, $stashId: String!) {
     findPerformers(performer_filter: { stash_id_endpoint: { endpoint: $endpoint, stash_id: $stashId, modifier: EQUALS } }, filter: { per_page: 1 }) {
-      performers { id name }
+      performers { id name favorite custom_fields }
     }
   }`, { endpoint: STASHDB_ENDPOINT, stashId });
   return data && data.findPerformers && data.findPerformers.performers[0];
@@ -264,7 +264,8 @@ async function findPerformerScenes(performerId, excludeSceneId) {
 
 // `performers` are { id, name } with StashDB IDs (see sidebarPerformers).
 // Returns one entry per performer, in the same order, or null where there's
-// nothing to show: not in Stash, no other scenes there, or the lookup failed.
+// nothing to show: not in Stash, or the lookup failed. One with no other
+// scenes in Stash still gets an entry, for the 📡 in its sidebar.
 async function stashPerformerScenes(sceneStashId, performers) {
   const cfg = await getConfig();
   const base = normalizeBase(cfg.stashUrl);
@@ -276,8 +277,10 @@ async function stashPerformerScenes(sceneStashId, performers) {
       const performer = await findPerformerByStashId(p.id);
       if (!performer) return null;
       const found = await findPerformerScenes(performer.id, current && current.id);
-      if (!found.count || !found.scenes.length) return null;
       return {
+        id: performer.id,
+        favorite: performer.favorite === true,
+        radar: radarSince(performer.custom_fields),
         name: performer.name || p.name,
         url: `${base}/performers/${performer.id}`,
         count: found.count,
@@ -415,6 +418,17 @@ browser.storage.onChanged.addListener((changes, area) => {
 });
 updateStashMarker();
 
+// 📡: puts a Stash performer on Stashboard's radar (the custom field
+// RADAR_FIELD, set to today) or takes them off. Only that field changes.
+async function setStashRadar(performerId, on) {
+  if (!/^\d+$/.test(String(performerId))) throw new Error(`Invalid Stash performer ID: ${performerId}`);
+  const customFields = on ? { partial: { [RADAR_FIELD]: localIsoDate(new Date()) } } : { remove: [RADAR_FIELD] };
+  const data = await stashFetch(`mutation StasharrRadar($input: PerformerUpdateInput!) {
+    performerUpdate(input: $input) { id custom_fields }
+  }`, { input: { id: String(performerId), custom_fields: customFields } });
+  return { radar: radarSince(data && data.performerUpdate && data.performerUpdate.custom_fields) };
+}
+
 async function testStashConnection() {
   const data = await stashFetch(`query { version { version } }`, {});
   return { version: data && data.version && data.version.version };
@@ -545,6 +559,11 @@ browser.runtime.onMessage.addListener((msg) => {
     case "stashScenesByStashIds":
       return stashScenesByStashIds(msg.stashIds).then(
         (scenes) => ({ ok: true, scenes }),
+        (err) => ({ ok: false, error: err.message })
+      );
+    case "stashRadar":
+      return setStashRadar(msg.performerId, msg.on === true).then(
+        (result) => ({ ok: true, ...result }),
         (err) => ({ ok: false, error: err.message })
       );
     case "testStash":

@@ -115,7 +115,7 @@ const stashSettings = { stashUrl: "http://stash:9999/", stashApiKey: "secret" };
 test("performer sidebars come from Stash by StashDB ID, without the scene being viewed", async () => {
   const stub = stashStub({
     currentScene: { id: "42", title: "This one", files: [] },
-    performers: { "sdb-jane": { id: "5", name: "Jane Doe" } },
+    performers: { "sdb-jane": { id: "5", name: "Jane Doe", favorite: false, custom_fields: { radar: "2026-10-20", other: "x" } } },
     scenes: {
       5: {
         count: 9,
@@ -136,6 +136,9 @@ test("performer sidebars come from Stash by StashDB ID, without the scene being 
   assert.equal(resp.ok, true);
   assert.deepEqual(resp.performers, [
     {
+      id: "5",
+      favorite: false,
+      radar: "2026-10-20",
       name: "Jane Doe",
       url: "http://stash:9999/performers/5",
       count: 9,
@@ -162,14 +165,16 @@ test("performer sidebars come from Stash by StashDB ID, without the scene being 
   });
 });
 
-test("a performer with no other scenes in Stash gets no sidebar", async () => {
+test("a performer with no other scenes in Stash still gets a sidebar, for the 📡", async () => {
   const stub = stashStub({
-    performers: { "sdb-jane": { id: "5", name: "Jane Doe" } },
+    performers: { "sdb-jane": { id: "5", name: "Jane Doe", favorite: true, custom_fields: {} } },
     scenes: { 5: { count: 0, scenes: [] } }
   });
   const { send } = loadBackground({ fetch: stub.fetch, settings: stashSettings });
   const resp = await send({ type: "stashPerformerScenes", sceneStashId: "s", performers: [{ id: "sdb-jane", name: "Jane Doe" }] });
-  assert.deepEqual(resp, { ok: true, performers: [null] });
+  assert.deepEqual(resp, { ok: true, performers: [
+    { id: "5", favorite: true, radar: null, name: "Jane Doe", url: "http://stash:9999/performers/5", count: 0, scenes: [] }
+  ] });
   // The scene isn't in Stash, so there's nothing to leave out.
   const sceneLookup = stub.requests.find((r) => r.body && r.body.query.includes("PerformerScenes"));
   assert.equal(sceneLookup.body.variables.sceneFilter.id, undefined);
@@ -299,4 +304,31 @@ test("stash-marker.js marks only the exact Stash origin, port included", async (
     { attributes: { "data-stasharr": "9.9.9" }, events: ["stasharr:ready"] });
   assert.deepEqual(await runMarker({ stashUrl: "http://192.168.1.10:9999", origin: "http://192.168.1.10:8080" }), { attributes: {}, events: [] });
   assert.deepEqual(await runMarker({ stashUrl: "", origin: "http://192.168.1.10:9999" }), { attributes: {}, events: [] });
+});
+
+test("📡 sets the radar field to today, or removes just that field", async () => {
+  const requests = [];
+  const fetch = async (url, options) => {
+    const body = JSON.parse(options.body);
+    requests.push(body);
+    const fields = body.variables.input.custom_fields.partial || {};
+    return ok(JSON.stringify({ data: { performerUpdate: { id: body.variables.input.id, custom_fields: { other: "kept", ...fields } } } }));
+  };
+  const { send } = loadBackground({ fetch, settings: stashSettings });
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
+
+  assert.deepEqual(await send({ type: "stashRadar", performerId: "5", on: true }), { ok: true, radar: today });
+  assert.match(requests[0].query, /performerUpdate\(input: \$input\)/);
+  assert.deepEqual(requests[0].variables.input, { id: "5", custom_fields: { partial: { radar: today } } });
+
+  assert.deepEqual(await send({ type: "stashRadar", performerId: "5", on: false }), { ok: true, radar: null });
+  assert.deepEqual(requests[1].variables.input, { id: "5", custom_fields: { remove: ["radar"] } });
+});
+
+test("📡 only takes numeric Stash performer IDs", async () => {
+  let calls = 0;
+  const { send } = loadBackground({ fetch: async () => { calls++; return ok("{}"); }, settings: stashSettings });
+  const resp = await send({ type: "stashRadar", performerId: "1) { id } x: performerDestroy(", on: true });
+  assert.equal(resp.ok, false);
+  assert.equal(calls, 0);
 });

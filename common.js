@@ -282,6 +282,26 @@ function stashMarkerPattern(stashUrl) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Stashboard's radar                                                  *
+ * ------------------------------------------------------------------ */
+
+// The Stash performer custom field Stashboard's radar lives in: the day a
+// performer went on it, YYYY-MM-DD in local time. Stashboard shows "More
+// from …" rows for them; stasharr's 📡 sets and clears the same field.
+var RADAR_FIELD = "radar";
+
+function localIsoDate(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// The radar day from a performer's custom fields, or null.
+function radarSince(customFields) {
+  const value = customFields && customFields[RADAR_FIELD];
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+/* ------------------------------------------------------------------ *
  * Right-click selection search                                        *
  * ------------------------------------------------------------------ */
 
@@ -319,6 +339,7 @@ if (typeof module !== "undefined" && module.exports) {
     matchedCriteria, scoreRelease, ageDistanceDays, ageLabel, sortByAgeProximity,
     sortResults, GRABBED_MAX_AGE_MS, pruneGrabbed, FEMALE_GENDERS, SIDEBAR_PERFORMERS,
     SIDEBAR_SCENES, sidebarPerformers, stashSceneLabel, AUTO_SEARCH_HASH, stashMarkerPattern,
+    RADAR_FIELD, localIsoDate, radarSince,
     cleanSelectionText
   };
 }
