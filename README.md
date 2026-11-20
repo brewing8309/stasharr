@@ -1,6 +1,6 @@
 <div align="center">
 
-# stasharr
+<img src="docs/assets/banner.png" alt="stasharr — from a StashDB scene to the release. One click." width="100%">
 
 **Find the release for a StashDB scene without ever leaving the page.**
 
@@ -13,6 +13,10 @@ escalating passes, scoring what comes back, and sending your pick straight to yo
 ![Dependencies](https://img.shields.io/badge/dependencies-none-success)
 ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)
 ![Vibecoded](https://img.shields.io/badge/100%25-vibecoded-ff69b4)
+
+<p>
+<a href="#quick-start">Quick start</a> · <a href="#what-it-does">Features</a> · <a href="#how-it-works">How it works</a> · <a href="#configuration">Configuration</a> · <a href="#faq">FAQ</a> · <a href="CHANGELOG.md">Changelog</a>
+</p>
 
 </div>
 
@@ -30,6 +34,30 @@ escalating passes, scoring what comes back, and sending your pick straight to yo
 > *(This notice is a licensing requirement, not just a disclaimer — see [License](#license).)*
 
 ---
+
+## Quick start
+
+<img src="docs/assets/steps.png" alt="Install, connect, search, grab" width="100%">
+
+**You need:** Firefox, a running [Prowlarr](https://prowlarr.com) with at least one indexer, and a
+[StashDB](https://stashdb.org) account. [StashApp](https://stashapp.cc) is optional — it adds the
+"already in your library" badges and sidebars.
+
+1. **Install.** Download `stasharr-<version>.xpi` from [Releases](https://github.com/brewing8309/stasharr/releases/latest)
+   and drag it into a Firefox window. Confirm the prompt.
+2. **Connect Prowlarr.** `about:addons` → stasharr → **Preferences**. Enter the **Prowlarr URL**
+   (e.g. `http://192.168.1.10:9696`, no trailing slash) and the **API key** from
+   Prowlarr → Settings → General → Security. Press **Test Prowlarr** — it should turn green.
+3. **Optional: connect Stash.** Enter your **Stash URL** (and API key if Stash asks for one), press
+   **Test Stash**, then **Save**.
+4. **Log in to StashDB** in the same Firefox. stasharr reads the scene through your own session.
+5. **Search.** Open any scene (`stashdb.org/scenes/<id>`), press **Search Prowlarr** in the dock
+   in the bottom right corner. Releases with the most hits come first.
+6. **Download.** Press **Download** on the release you want. Prowlarr passes it to your download
+   client. The button turns into **Sent**.
+
+> **Tip:** the dock's **Auto-Download** switch sends the best release (every hit matched)
+> automatically after a search. Leave it off until you trust your indexers.
 
 ## What it does
 
@@ -53,6 +81,8 @@ This does that for you, and then some:
 | **Radar** | The **Radar** button in each performer sidebar puts them on Stashboard's radar: more of them on your Stash front page, short of a favourite. |
 | **Reverse lookup** | Select *any* text anywhere in the browser → right-click → **Search StashDB** to find the scene that text belongs to. |
 | **Full transparency** | A **Details** pane shows every query fired, live, with each one's own raw unfiltered results. No black box. |
+
+<img src="docs/assets/result.png" alt="The results panel: scored releases grouped by resolution" width="100%">
 
 ## How it works
 
@@ -79,6 +109,8 @@ your Firefox talking to your Prowlarr, your Stash, and StashDB.
 ```
 
 ### The three stages
+
+<img src="docs/assets/stages.png" alt="Three escalating search passes" width="100%">
 
 Each stage fires its queries **in parallel**, merges the responses, de-duplicates them by release
 GUID, and merges them into everything found so far. Results never get thrown away when you move
@@ -279,6 +311,30 @@ A couple of knobs are deliberately not in the UI, but are one-line edits if you 
 | No owned badge on scene cards | Stash URL not set, Stash older than 0.31 (it lacks the `stash_ids_endpoint` filter — the console says so), or the scenes were never matched to StashDB in Stash. |
 | No performer sidebars | Stash URL not set, the performer isn't linked to StashDB in Stash (matching is done on her StashDB ID, never by name), or you have no other scene of hers. Male performers don't get one. |
 | Right-click search does nothing | Restricted page (`about:`, `addons.mozilla.org`) — Firefox forbids injection there. Also needs a StashDB login. |
+
+## FAQ
+
+**Is it safe to give it my Prowlarr key?** The key stays in `browser.storage.local` on your machine
+and is only sent to the Prowlarr URL you typed. There is no stasharr server and no telemetry; the
+manifest declares `data_collection_permissions: none`.
+
+**Why `<all_urls>`?** Your Prowlarr and Stash live on addresses only you know (LAN IPs, your own
+domains), so Firefox can only be told to allow cross-origin requests broadly. The code only ever
+contacts stashdb.org, your Prowlarr and your Stash — read `background.js` to verify.
+
+**Does it work on Chrome, Edge or Android?** No. It's a Firefox Manifest v2 extension; desktop
+Firefox only.
+
+**Does it download anything itself?** No. It asks Prowlarr to grab a release. Prowlarr hands it to
+whatever download client you set up there.
+
+**A release I own shows no badge.** Matching uses the StashDB ID that Stash stores when a scene
+was identified. Scenes never matched to StashDB in Stash can't be recognised. See
+[Troubleshooting](#troubleshooting).
+
+**How do updates work?** The signed add-on checks [`updates.json`](updates.json) in this repo
+(about:addons → gear → *Check for Updates*). Nothing is installed without Firefox's normal
+update flow.
 
 ## Under the hood
 

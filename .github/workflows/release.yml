@@ -36,7 +36,7 @@ jobs:
         run: node --test
 
       - name: Lint
-        run: npx --yes web-ext@10.7.0 lint --self-hosted --ignore-files tests updates.json
+        run: npx --yes web-ext@10.7.0 lint --self-hosted --ignore-files tests docs updates.json
 
       - name: Sign
         env:
@@ -44,7 +44,7 @@ jobs:
           WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
         run: |
           npx --yes web-ext@10.7.0 sign --channel=unlisted \
-            --ignore-files tests updates.json \
+            --ignore-files tests docs updates.json \
             --artifacts-dir web-ext-artifacts
           mv web-ext-artifacts/*.xpi "stasharr-${{ steps.version.outputs.version }}.xpi"
 
