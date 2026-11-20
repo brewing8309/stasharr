@@ -41,16 +41,16 @@ This does that for you, and then some:
 
 | | |
 |---|---|
-| **One-click search** | A floating **⬇ Search Prowlarr** button on every `stashdb.org/scenes/<id>` page. |
+| **One-click search** | A **Search Prowlarr** button in a small dock in the bottom right corner of every `stashdb.org/scenes/<id>` page, with the Auto-Download switch next to it. |
 | **Three escalating passes** | Starts narrow and precise, widens on demand — 5 parallel queries, then 3 more, then a last-ditch performer-only sweep. |
 | **Scored results** | Every release is checked against 5 known facts about the scene and ranked, so a prolific performer's entire back catalogue doesn't drown the one file you want. |
 | **Grouped by quality** | 2160p → 1080p → 720p → everything else, with seeders/size/indexer on every row. |
 | **One-click grab** | **Download** hands the release to Prowlarr, which passes it to your download client. |
 | **"Already have it"** | If you run StashApp, scenes already in your library get a badge with their resolution and a link — before you search anything. |
-| **✓ in every list** | Scene cards on performer, studio, tag and search pages carry a **✓ 1080p** (or whatever you have) when that scene is already in your Stash — one request per page, and a click on it opens the scene in Stash. Needs Stash 0.31 or newer. |
+| **Owned badge in every list** | Scene cards on performer, studio, tag and search pages carry a lime **1080p** badge (or whatever you have) when that scene is already in your Stash — one request per page, and a click on it opens the scene in Stash. Needs Stash 0.31 or newer. |
 | **Her other scenes** | With StashApp set up, the scene's first two performers each get a sidebar — right edge, then left — with up to 4 of their other scenes in your library, thumbnails included, and a link to the performer in Stash when there are more. |
 | **Download from Stashboard** | With [Stashboard](https://github.com/brewing8309/stashboard) on your Stash front page, its StashDB tiles get a **⬇ Download** button: it opens the scene on StashDB and starts the search right away. |
-| **📡 Radar** | A 📡 in each performer sidebar puts them on Stashboard's radar: more of them on your Stash front page, short of a favourite. |
+| **Radar** | The **Radar** button in each performer sidebar puts them on Stashboard's radar: more of them on your Stash front page, short of a favourite. |
 | **Reverse lookup** | Select *any* text anywhere in the browser → right-click → **Search StashDB** to find the scene that text belongs to. |
 | **Full transparency** | A **Details** pane shows every query fired, live, with each one's own raw unfiltered results. No black box. |
 
@@ -101,7 +101,7 @@ up a stage — the list only ever grows.
 <td>Must match ≥ 2 of 5 criteria</td>
 </tr>
 <tr>
-<td><b>2 — 🍆 Try Harder</b></td>
+<td><b>2 — Try harder</b></td>
 <td>Click 1</td>
 <td>
 
@@ -113,7 +113,7 @@ up a stage — the list only ever grows.
 <td>Same ≥ 2 of 5 filter</td>
 </tr>
 <tr>
-<td><b>3 — 🍑 Last Chance...</b></td>
+<td><b>3 — Last chance</b></td>
 <td>Click 2</td>
 <td>
 
@@ -163,14 +163,14 @@ options) so Stashboard knows to show the button, and any link to a StashDB scene
 `#stasharr-search` opens with the search started. That link only ever starts a search; sending
 a release to Prowlarr always takes your click.
 
-### 📡 Stashboard's radar
+### Stashboard's radar
 
-The performer sidebars have a **📡** in their header: it puts the performer on
+The performer sidebars have a **Radar** button in their header: it puts the performer on
 [Stashboard](https://github.com/brewing8309/stashboard)'s radar — not a favourite, but a
 **More from …** row for them on your Stash front page, with their unwatched scenes and the StashDB
 ones you're missing. Click again to take them off. It writes one thing, the performer's `radar`
 custom field in Stash (the day you set it), the same field Stashboard's own 📡 uses. A performer
-gets a sidebar for this even with no other scenes in your Stash yet; favourites don't get a 📡.
+gets a sidebar for this even with no other scenes in your Stash yet; favourites don't get the button.
 
 ### Reverse lookup
 
@@ -242,7 +242,7 @@ Open the add-on's preferences (`about:addons` → stasharr → Preferences) and 
 | **Search categories** | `6000` | no | Newznab/Torznab category IDs, comma-separated. `6000` = XXX. Empty = all. |
 | **Result limit** | `200` | no | Max releases Prowlarr returns per query. Raise it if stage 3 seems to be missing hits for a prolific performer. |
 | **Request timeout** | `25` | no | Seconds to wait for Prowlarr, Stash or StashDB before giving up. Raise it if slow indexers keep timing out. |
-| **Stash URL** | — | no | Your own StashApp, e.g. `http://localhost:9999`. Enables the "already in your library" badge, the performer sidebars, the ✓ on scene cards and Stashboard's download buttons. |
+| **Stash URL** | — | no | Your own StashApp, e.g. `http://localhost:9999`. Enables the "already in your library" badge, the performer sidebars, the owned badge on scene cards and Stashboard's download buttons. |
 | **Stash API key** | — | no | Only if your Stash requires one. |
 
 **Test Prowlarr** and **Test Stash** verify each connection before you save.
@@ -256,11 +256,11 @@ A couple of knobs are deliberately not in the UI, but are one-line edits if you 
 1. Open a scene on `stashdb.org`. If it's already in your Stash library, the badge tells you now,
    and the sidebars show what else you have of its performers. On narrower windows they start
    folded to their header; **+** opens one.
-2. Hit **⬇ Search Prowlarr** (bottom right).
-3. Pick a release, hit **Download**. It turns into **✓ Sent** and stays that way — across
+2. Hit **Search Prowlarr** (bottom right).
+3. Pick a release, hit **Download**. It turns into **Sent** and stays that way — across
    stages, new searches, other tabs and reloads, for 90 days — so you can't accidentally grab the
    same thing twice.
-4. Nothing good? **🍆 Try Harder**, then **🍑 Last Chance...**.
+4. Nothing good? **Try harder**, then **Last chance**.
 5. Curious what it actually searched for? Expand **Details** — every query, every raw result.
 6. Come back to a scene within 30 minutes and the panel picks up where you left off, without
    querying your indexers again. **↻** in the panel header searches fresh.
@@ -276,7 +276,7 @@ A couple of knobs are deliberately not in the UI, but are one-line edits if you 
 | Some queries fail, others don't | You'll get a warning banner above the results; expand **Details** to see which indexer choked. Partial results still show. |
 | Stage 3 feels like it's missing things | Raise **Result limit**. Prowlarr caps at 200 by default, and a prolific performer blows through that easily. |
 | No "already in Stash" badge | Stash URL not set, or the scene was never scraped from StashDB (matching is done on the stash-box ID StashApp records). |
-| No ✓ on scene cards | Stash URL not set, Stash older than 0.31 (it lacks the `stash_ids_endpoint` filter — the console says so), or the scenes were never matched to StashDB in Stash. |
+| No owned badge on scene cards | Stash URL not set, Stash older than 0.31 (it lacks the `stash_ids_endpoint` filter — the console says so), or the scenes were never matched to StashDB in Stash. |
 | No performer sidebars | Stash URL not set, the performer isn't linked to StashDB in Stash (matching is done on her StashDB ID, never by name), or you have no other scene of hers. Male performers don't get one. |
 | Right-click search does nothing | Restricted page (`about:`, `addons.mozilla.org`) — Firefox forbids injection there. Also needs a StashDB login. |
 
@@ -291,9 +291,10 @@ background.js    every cross-origin request (Prowlarr, StashApp, StashDB search)
                  configurable timeouts, context-menu registration
 content.js       injected on stashdb.org — scene resolution, query building,
                  the 3-stage state machine, results panel, performer sidebars,
-                 ✓ on scene cards
+                 owned badges on scene cards
 picker.js        injected on demand into any page for the reverse lookup panel
-content.css      shared styling for both panels
+content.css      the look of everything injected: dock, panels, sidebars, badges
+fonts/           Archivo + IBM Plex Mono (SIL OFL 1.1), bundled — no font CDN requests
 options.html/js  preferences
 tests/           node:test suite — run with `node --test` (Node 20+, nothing to install)
 ```

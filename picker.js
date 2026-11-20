@@ -5,7 +5,7 @@
  *
  * This is purely a finder/confirmation UI — it does not talk to Prowlarr at
  * all. Picking a result just opens the real scene page on stashdb.org,
- * where the existing "⬇ Search Prowlarr" button takes over from there.
+ * where the existing "Search Prowlarr" button takes over from there.
  *
  * Guarded against running its setup twice: a second right-click search on
  * the same tab re-injects this file, but content scripts injected via
@@ -66,8 +66,12 @@
     panel.id = "sdp-picker-panel";
     panel.innerHTML = `
       <div class="sdp-panel-head">
-        <span class="sdp-title">StashDB search</span>
-        <button type="button" class="sdp-close" title="Close">✕</button>
+        <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#ff6b2c"/><g fill="#141517"><rect x="19.5" y="12" width="15" height="6" rx="2.5"/><rect x="12" y="19.5" width="6" height="8" rx="2.5"/><rect x="19.5" y="29" width="15" height="6" rx="2.5"/><rect x="36" y="36.5" width="6" height="8" rx="2.5"/><rect x="19.5" y="46" width="15" height="6" rx="2.5"/></g><circle cx="49" cy="49" r="3.5" fill="#fff"/></svg>
+        <div class="sdp-head-text">
+          <span class="sdp-title">StashDB matches</span>
+          <span class="sdp-subtitle"></span>
+        </div>
+        <button type="button" class="sdp-close" title="Close" aria-label="Close"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <div class="sdp-body"></div>`;
     panel.querySelector(".sdp-close").addEventListener("click", closePicker);
@@ -75,6 +79,7 @@
 
     const body = panel.querySelector(".sdp-body");
     const shownTerm = data.term || data.raw || "";
+    panel.querySelector(".sdp-subtitle").textContent = shownTerm ? `“${shownTerm}”` : "";
     const note = document.createElement("div");
     note.className = "sdp-note";
     note.textContent = data.term && data.raw && data.term !== data.raw

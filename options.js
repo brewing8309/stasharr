@@ -13,10 +13,10 @@ async function load() {
   $("stashApiKey").value = cfg.stashApiKey || "";
 }
 
-function setStatus(msg, cls) {
-  const el = $("status");
+function setStatus(msg, cls, id = "status") {
+  const el = $(id);
   el.textContent = msg;
-  el.className = cls || "";
+  el.className = `status ${cls || ""}`.trim();
 }
 
 async function save() {
@@ -36,22 +36,24 @@ async function save() {
 
 // A rejected sendMessage (background not ready, extension just reloaded)
 // would otherwise leave "Testing…" on screen with the error only in the console.
-async function testConnection(type, product) {
+// The result shows next to the section's own Test button.
+async function testConnection(type, product, statusId) {
   try {
     await save();
-    setStatus("Testing…", "");
+    setStatus("Testing…", "", statusId);
     const resp = await browser.runtime.sendMessage({ type });
     if (resp && resp.ok) {
-      setStatus(`Connected${resp.info && resp.info.version ? ` (${product} ${resp.info.version})` : ""}.`, "ok");
+      setStatus(`Connected${resp.info && resp.info.version ? ` (${product} ${resp.info.version})` : ""}.`, "ok", statusId);
     } else {
-      setStatus((resp && resp.error) || "Connection failed.", "err");
+      setStatus((resp && resp.error) || "Connection failed.", "err", statusId);
     }
   } catch (e) {
-    setStatus(e.message || "Connection failed.", "err");
+    setStatus(e.message || "Connection failed.", "err", statusId);
   }
 }
 
 $("save").addEventListener("click", () => save().catch((e) => setStatus(e.message, "err")));
-$("test").addEventListener("click", () => testConnection("test", "Prowlarr"));
-$("testStash").addEventListener("click", () => testConnection("testStash", "Stash"));
+$("test").addEventListener("click", () => testConnection("test", "Prowlarr", "statusProwlarr"));
+$("testStash").addEventListener("click", () => testConnection("testStash", "Stash", "statusStash"));
+$("version").textContent = `v${browser.runtime.getManifest().version} · settings`;
 load().catch((e) => setStatus(`Could not load settings: ${e.message}`, "err"));

@@ -265,7 +265,7 @@ async function findPerformerScenes(performerId, excludeSceneId) {
 // `performers` are { id, name } with StashDB IDs (see sidebarPerformers).
 // Returns one entry per performer, in the same order, or null where there's
 // nothing to show: not in Stash, or the lookup failed. One with no other
-// scenes in Stash still gets an entry, for the 📡 in its sidebar.
+// scenes in Stash still gets an entry, for the radar button in its sidebar.
 async function stashPerformerScenes(sceneStashId, performers) {
   const cfg = await getConfig();
   const base = normalizeBase(cfg.stashUrl);
@@ -344,7 +344,7 @@ async function blobToDataUrl(blob) {
 
 /* ------------------------------------------------------------------ *
  * StashApp: which scenes of a StashDB list are already in the         *
- * library, for the ✓ on StashDB's scene cards                         *
+ * library, for the owned badge on StashDB's scene cards               *
  * ------------------------------------------------------------------ */
 
 // One query per this many IDs. A StashDB list page shows far fewer.
@@ -418,7 +418,7 @@ browser.storage.onChanged.addListener((changes, area) => {
 });
 updateStashMarker();
 
-// 📡: puts a Stash performer on Stashboard's radar (the custom field
+// Radar button: puts a Stash performer on Stashboard's radar (the custom field
 // RADAR_FIELD, set to today) or takes them off. Only that field changes.
 async function setStashRadar(performerId, on) {
   if (!/^\d+$/.test(String(performerId))) throw new Error(`Invalid Stash performer ID: ${performerId}`);

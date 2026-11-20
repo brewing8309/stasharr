@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.8.0 — 2026-11-20
+
+### Changed
+
+- **New look.** A new logo (an "S" from five segments of a seven-segment display, with a lime
+  dot) and one design for everything stasharr puts on a page: graphite surfaces, orange for
+  actions (search, download), lime for "already in your Stash", numbers in mono. Archivo and
+  IBM Plex Mono ship with the extension (SIL OFL 1.1), so no font is loaded from anywhere else.
+  No emoji left in the interface.
+- **One dock in the bottom right corner** holds the Stash badge, the search button and the
+  Auto-Download switch. While a search runs, the button shows how many of its queries are back.
+- **Results panel:** the three passes (Automatic, Try harder, Last chance) show as steps at the
+  top, the scene's studio, date and cast under the title, and the Details line sums up queries,
+  failures and kept releases. Each release shows its scene-fact hits as segments, lime when all
+  match. Resolution groups show how many releases they hold.
+- **The right-hand performer sidebar folds up while the panel is open**, so the two no longer
+  overlap, and opens again when the panel closes.
+- **Performer sidebars:** initials and scene count in the header, a labelled Radar button, the
+  newest scene large and the others as compact rows.
+- **Settings page** redone in the same look, with each Test result next to its own button.
+
+### Added
+
+- **Auto-Download switch** next to the search button: after a search, the top release with
+  every hit is sent to Prowlarr automatically. Not for searches started from Stashboard.
+
+### Fixed
+
+- **Hits count without a parent studio.** A scene without one could never reach full marks;
+  the count now leaves Parent studio out for it (4/4 instead of 4/5).
+
 ## 1.7.0 — 2026-10-27
 
 ### Added
