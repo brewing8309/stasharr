@@ -14,10 +14,10 @@
  * MIN_SCORE of the scene's known criteria (studio, parent studio, each
  * performer/alias, title, date — see scoreRelease/CRITERIA).
  *
- * Stage 2 ("🍆 Try Harder", click 1): SECOND_PASS_QUERIES — the same idea
+ * Stage 2 ("Try harder", click 1): SECOND_PASS_QUERIES — the same idea
  * using parent studio and performer aliases instead.
  *
- * Stage 3 ("🍑 Last Chance...", click 2): a single "performers only" query,
+ * Stage 3 ("Last chance", click 2): a single "performers only" query,
  * with no MIN_SCORE filter and no resolution grouping — instead sorted by
  * how close each release's Prowlarr publish date is to the scene's release
  * date (closer = higher) and capped at LAST_CHANCE_LIMIT, since a popular
@@ -27,12 +27,12 @@
  *
  * If a StashApp instance is configured, it also checks (via the background
  * script) whether the scene is already in that library and shows a badge
- * with its resolution and a link, above the search button. And for the
+ * with its resolution and a link, above the search button in the dock. And for the
  * scene's first two female performers, a sidebar on the right (first) and
  * left (second) edge shows up to SIDEBAR_SCENES of their other scenes in
  * Stash, with thumbnails and a link to the performer there if there are more.
  * On every StashDB page, scene cards in lists (performer, studio, tag and
- * search pages, the scene list) get a ✓ with the resolution when that scene
+ * search pages, the scene list) get a badge with the resolution when that scene
  * is already in Stash.
  */
 
@@ -53,10 +53,25 @@ let lastSceneId = null;
 // syncButton() below already runs before the end of this file is reached.
 // The first performer's sidebar goes on the right edge, the second's on the left.
 const SIDEBAR_SIDES = ["right", "left"];
-// StashDB's content spans the full width, so the two 360px sidebars always
+// StashDB's content spans the full width, so the two 380px sidebars always
 // cover some of it; below this viewport width they'd cover too much and
 // start collapsed to their header.
 const SIDEBAR_COLLAPSE_BELOW_PX = 1800;
+// Inline icons (static markup, never mixed with page or API data), turned
+// into elements by icon(). Up here for the same reason: the dock is built by
+// that first syncButton().
+const ICONS = {
+  logo: `<svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#ff6b2c"/><g fill="#141517"><rect x="19.5" y="12" width="15" height="6" rx="2.5"/><rect x="12" y="19.5" width="6" height="8" rx="2.5"/><rect x="19.5" y="29" width="15" height="6" rx="2.5"/><rect x="36" y="36.5" width="6" height="8" rx="2.5"/><rect x="19.5" y="46" width="15" height="6" rx="2.5"/></g><circle cx="49" cy="49" r="3.5" fill="#fff"/></svg>`,
+  search: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6"/></svg>`,
+  download: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12M6.5 10.5L12 16l5.5-5.5M5 20h14"/></svg>`,
+  check: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`,
+  refresh: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>`,
+  close: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
+  chevron: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>`,
+  open: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg>`,
+  arrow: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`,
+  radar: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 19.1a10 10 0 0 1 0-14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg>`
+};
 // Bumped on every scene change, so a lookup still in flight for the previous
 // scene (or an earlier visit to this one) can't add its sidebars late.
 let sidebarGeneration = 0;
@@ -69,11 +84,8 @@ function syncButton() {
   if (sceneId === lastSceneId) return;
   lastSceneId = sceneId;
 
-  for (const id of ["sdp-button", "sdp-auto"]) {
-    const existing = document.getElementById(id);
-    if (existing) existing.remove();
-  }
-  hideStashBadge();
+  const dock = document.getElementById("sdp-dock");
+  if (dock) dock.remove();
   hidePerformerSidebars();
   closePanel();
   if (sceneId) {
@@ -121,14 +133,34 @@ new MutationObserver(queueSync).observe(document.body, { childList: true, subtre
 window.addEventListener("popstate", queueSync);
 syncButton();
 
+function icon(name) {
+  const svg = ICONS[name].replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ');
+  return document.importNode(new DOMParser().parseFromString(svg, "image/svg+xml").documentElement, true);
+}
+
+// A <span> with text, for button labels next to an icon.
+function textSpan(text, className) {
+  const span = document.createElement("span");
+  if (className) span.className = className;
+  span.textContent = text;
+  return span;
+}
+
+// The dock in the bottom right corner: the Stash badge (once known) on top,
+// the search button and the Auto-Download switch below it.
 function injectButton(sceneId) {
+  const dock = document.createElement("div");
+  dock.id = "sdp-dock";
+  const row = document.createElement("div");
+  row.className = "sdp-dock-row";
   const btn = document.createElement("button");
   btn.id = "sdp-button";
   btn.type = "button";
-  btn.textContent = "⬇ Search Prowlarr";
   btn.addEventListener("click", () => onSearchClick());
-  document.body.appendChild(btn);
-  injectAutoToggle();
+  row.append(btn, autoToggle());
+  dock.appendChild(row);
+  document.body.appendChild(dock);
+  resetSearchButton();
 
   checkStashApp(sceneId).then((scene) => {
     // The user may have navigated away while the lookup was in flight.
@@ -136,17 +168,36 @@ function injectButton(sceneId) {
   });
 }
 
-// The Auto-Download switch under the search button. Stored in
+// The Auto-Download switch next to the search button. Stored in
 // storage.local, so it stays as set across scenes, tabs and restarts.
-function injectAutoToggle() {
+function autoToggle() {
   const wrap = document.createElement("label");
   wrap.id = "sdp-auto";
   wrap.title = "After a search, download the top release with every hit automatically";
-  wrap.innerHTML = `<input type="checkbox"><span class="sdp-switch"></span><span>Auto-Download</span>`;
+  wrap.innerHTML = `<input type="checkbox" aria-label="Auto-Download"><span class="sdp-switch"></span><span class="sdp-auto-label">Auto-DL</span>`;
   const input = wrap.querySelector("input");
   browser.storage.local.get({ autoDownload: false }).then(({ autoDownload }) => { input.checked = autoDownload; });
   input.addEventListener("change", () => browser.storage.local.set({ autoDownload: input.checked }));
-  document.body.appendChild(wrap);
+  return wrap;
+}
+
+function resetSearchButton() {
+  const btn = document.getElementById("sdp-button");
+  if (btn) btn.replaceChildren(icon("search"), textSpan("Search Prowlarr"));
+}
+
+// While a search runs, the button shows how many of its queries are back.
+function showSearchProgress(done, total) {
+  const btn = document.getElementById("sdp-button");
+  if (!btn) return;
+  btn.innerHTML = `<span>Searching</span><span class="sdp-progress"></span><span class="sdp-progress-n"></span>`;
+  const bar = btn.querySelector(".sdp-progress");
+  for (let i = 0; i < total; i++) {
+    const seg = document.createElement("span");
+    if (i < done) seg.className = "sdp-on";
+    bar.appendChild(seg);
+  }
+  btn.querySelector(".sdp-progress-n").textContent = `${done}/${total}`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -290,22 +341,24 @@ async function checkStashApp(sceneId) {
   }
 }
 
-function hideStashBadge() {
-  const el = document.getElementById("sdp-stash-badge");
-  if (el) el.remove();
-}
-
+// Goes on top of the dock, which then grows upwards: the panel moves along.
 function showStashBadge(scene) {
-  hideStashBadge();
+  const dock = document.getElementById("sdp-dock");
+  if (!dock) return;
+  const old = document.getElementById("sdp-stash-badge");
+  if (old) old.remove();
   const badge = document.createElement("div");
   badge.id = "sdp-stash-badge";
   const link = document.createElement("a");
   link.href = scene.url;
   link.target = "_blank";
   link.rel = "noopener noreferrer";
-  link.textContent = `✓ Already in Stash — ${scene.resolution}`;
+  link.title = `Already in Stash — ${scene.resolution}. Opens it in Stash.`;
+  link.append(textSpan("", "sdp-dot"), textSpan("Already in your Stash", "sdp-badge-text"),
+    textSpan(scene.resolution, "sdp-badge-res"), icon("open"));
   badge.appendChild(link);
-  document.body.appendChild(badge);
+  dock.prepend(badge);
+  placePanel();
 }
 
 /* ------------------------------------------------------------------ *
@@ -364,42 +417,55 @@ function newTabLink(className, href) {
 function renderSidebar(performer, side) {
   const bar = document.createElement("aside");
   bar.className = `sdp-sidebar sdp-sidebar-${side}`;
-  if (window.innerWidth < SIDEBAR_COLLAPSE_BELOW_PX) bar.classList.add("sdp-collapsed");
 
   const head = document.createElement("div");
   head.className = "sdp-sidebar-head";
+  const avatar = document.createElement("span");
+  avatar.className = "sdp-sidebar-avatar";
+  avatar.setAttribute("aria-hidden", "true");
+  avatar.textContent = initials(performer.name);
+  const who = document.createElement("div");
+  who.className = "sdp-sidebar-who";
   const name = newTabLink("sdp-sidebar-name", performer.url);
   name.textContent = performer.name;
   name.title = `${performer.name} in Stash`;
+  const count = document.createElement("span");
+  count.className = "sdp-sidebar-count";
+  count.textContent = performer.count
+    ? `${performer.count} other scene${performer.count === 1 ? "" : "s"} in Stash`
+    : "No other scenes in Stash";
+  who.append(name, count);
+  head.append(avatar, who);
+  const radar = radarButton(performer);
+  if (radar) head.append(radar);
+  bar.appendChild(head);
+
+  // Nothing to fold away without scenes: just the header, for the radar.
+  if (!performer.scenes.length) {
+    document.body.appendChild(bar);
+    return;
+  }
+
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "sdp-sidebar-toggle";
-  const syncToggle = () => {
-    const collapsed = bar.classList.contains("sdp-collapsed");
-    toggle.textContent = collapsed ? "+" : "–";
-    toggle.title = collapsed ? "Show scenes" : "Hide scenes";
-  };
+  toggle.appendChild(icon("chevron"));
   toggle.addEventListener("click", () => {
-    bar.classList.toggle("sdp-collapsed");
-    syncToggle();
+    delete bar.dataset.sdpPanelCollapsed;
+    setSidebarCollapsed(bar, !bar.classList.contains("sdp-collapsed"));
   });
-  syncToggle();
-  head.append(name);
-  const radar = radarButton(performer);
-  if (radar) head.append(radar);
   head.append(toggle);
+  setSidebarCollapsed(bar, window.innerWidth < SIDEBAR_COLLAPSE_BELOW_PX);
 
   const body = document.createElement("div");
   body.className = "sdp-sidebar-body";
   const label = document.createElement("div");
   label.className = "sdp-sidebar-label";
-  label.textContent = performer.count
-    ? `${performer.count} other scene${performer.count === 1 ? "" : "s"} in Stash`
-    : "No other scenes in Stash";
+  label.textContent = "Newest in your Stash";
   body.appendChild(label);
 
-  for (const scene of performer.scenes) {
-    const card = newTabLink("sdp-sidebar-scene", scene.url);
+  for (const [i, scene] of performer.scenes.entries()) {
+    const card = newTabLink(`sdp-sidebar-scene${i === 0 ? " sdp-lead" : ""}`, scene.url);
     card.title = scene.title;
     const img = document.createElement("img");
     img.className = "sdp-sidebar-thumb";
@@ -421,15 +487,30 @@ function renderSidebar(performer, side) {
   const rest = performer.count - performer.scenes.length;
   if (rest > 0) {
     const more = newTabLink("sdp-sidebar-more", performer.url);
-    more.textContent = `+${rest} more in Stash →`;
+    more.append(textSpan(`${rest} more in Stash`), icon("arrow"));
     body.appendChild(more);
   }
 
-  bar.append(head, body);
+  bar.appendChild(body);
   document.body.appendChild(bar);
 }
 
-// 📡 in a sidebar's header: puts the performer on Stashboard's radar (or
+function setSidebarCollapsed(bar, collapsed) {
+  bar.classList.toggle("sdp-collapsed", collapsed);
+  const toggle = bar.querySelector(".sdp-sidebar-toggle");
+  if (!toggle) return;
+  toggle.title = collapsed ? "Show scenes" : "Hide scenes";
+  toggle.setAttribute("aria-label", toggle.title);
+  toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+}
+
+// "Mara Quinn" → "MQ", for the round placeholder in a sidebar's header.
+function initials(name) {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "?";
+}
+
+// Radar pill in a sidebar's header: puts the performer on Stashboard's radar (or
 // takes them off), so its front page shows more of them. Not offered for
 // favourites, unless one is on the radar anyway.
 function radarButton(performer) {
@@ -437,9 +518,10 @@ function radarButton(performer) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "sdp-sidebar-radar";
-  button.textContent = "📡";
+  button.append(icon("radar"), textSpan(""));
   let since = performer.radar;
   const show = (error) => {
+    button.lastChild.textContent = error ? "Failed" : since ? "On radar" : "Radar";
     button.classList.toggle("sdp-on", !!since);
     button.classList.toggle("sdp-error", !!error);
     button.setAttribute("aria-pressed", since ? "true" : "false");
@@ -477,7 +559,7 @@ async function loadSidebarThumb(img, stashSceneId) {
 }
 
 /* ------------------------------------------------------------------ *
- * StashApp: ✓ on StashDB's scene cards                                *
+ * StashApp: owned badge on StashDB's scene cards                      *
  * ------------------------------------------------------------------ */
 
 // StashDB's scene cards, per stash-box: the grid card of the scene,
@@ -597,7 +679,7 @@ function markCard(host, id, scene) {
   host.dataset.sdpStashFor = id;
   if (!scene) return;
   const badge = newTabLink("sdp-card-badge", scene.url);
-  badge.textContent = `✓ ${scene.resolution || "In Stash"}`;
+  badge.textContent = scene.resolution || "In Stash";
   badge.title = `Already in Stash${scene.resolution ? ` — ${scene.resolution}` : ""}`;
   // A search row is itself a link to the StashDB scene, whose clicks React
   // Router handles at the page root: this one should only open Stash.
@@ -675,7 +757,7 @@ const BROAD_QUERIES = [
   }
 ];
 
-// Stage 2 ("🍆 Try Harder"): a second automatic parallel batch using the
+// Stage 2 ("Try harder"): a second automatic parallel batch using the
 // parent studio and performer aliases instead of the studio/primary names
 // BROAD_QUERIES already tried. A query is guarded to "" (not left to
 // joinTerms) when there's no parent studio, so it's skipped for the right
@@ -701,7 +783,7 @@ const SECOND_PASS_QUERIES = [
   }
 ];
 
-// Stage 3 ("🍑 Last Chance..."): the loosest possible query — performers
+// Stage 3 ("Last chance"): the loosest possible query — performers
 // alone, no date/studio at all.
 function lastChanceQuery(scene) {
   return joinTerms([...scene.females]);
@@ -711,10 +793,20 @@ function lastChanceQuery(scene) {
  * UI: results panel                                                   *
  * ------------------------------------------------------------------ */
 
+// The right-hand sidebar folds up to its header while the panel is open,
+// so the two don't overlap, and opens again when the panel closes, unless
+// the user has used its toggle meanwhile.
 function closePanel() {
   const p = document.getElementById("sdp-panel");
   if (p) p.remove();
+  const right = document.querySelector(".sdp-sidebar-right[data-sdp-panel-collapsed]");
+  if (right) {
+    delete right.dataset.sdpPanelCollapsed;
+    setSidebarCollapsed(right, false);
+  }
 }
+
+const STEP_LABELS = ["Automatic", "Try harder", "Last chance"];
 
 function ensurePanel() {
   closePanel();
@@ -722,25 +814,67 @@ function ensurePanel() {
   panel.id = "sdp-panel";
   panel.innerHTML = `
     <div class="sdp-panel-head">
-      <span class="sdp-title">StashDB → Prowlarr</span>
+      <div class="sdp-head-text">
+        <span class="sdp-title">Releases</span>
+        <span class="sdp-subtitle"></span>
+      </div>
       <span class="sdp-head-actions">
-        <button type="button" class="sdp-refresh" title="Search again">↻</button>
-        <button type="button" class="sdp-close" title="Close">✕</button>
+        <button type="button" class="sdp-refresh" title="Search again" aria-label="Search again"></button>
+        <button type="button" class="sdp-close" title="Close" aria-label="Close"></button>
       </span>
     </div>
+    <div class="sdp-steps"></div>
     <details class="sdp-details">
-      <summary>Details</summary>
+      <summary><span class="sdp-details-sum">Reading scene…</span><span class="sdp-details-tag">Details</span></summary>
       <div class="sdp-details-body"></div>
     </details>
     <div class="sdp-body"></div>
     <div class="sdp-panel-foot">
-      <button type="button" class="sdp-try-harder" hidden>🍆 Try Harder</button>
+      <button type="button" class="sdp-try-harder" hidden></button>
     </div>`;
+  panel.querySelector(".sdp-panel-head").prepend(icon("logo"));
+  panel.querySelector(".sdp-refresh").appendChild(icon("refresh"));
+  panel.querySelector(".sdp-close").appendChild(icon("close"));
+  const steps = panel.querySelector(".sdp-steps");
+  STEP_LABELS.forEach((label, i) => {
+    const step = document.createElement("div");
+    step.className = `sdp-step${i === 0 ? " sdp-current" : ""}`;
+    step.append(textSpan("", "sdp-step-bar"), textSpan(`Pass ${i + 1}`, "sdp-step-num"), textSpan(label, "sdp-step-label"));
+    steps.appendChild(step);
+  });
   panel.querySelector(".sdp-close").addEventListener("click", closePanel);
   panel.querySelector(".sdp-refresh").addEventListener("click", () => onSearchClick({ fresh: true }));
   panel.querySelector(".sdp-try-harder").addEventListener("click", onTryHarderClick);
   document.body.appendChild(panel);
+
+  const right = document.querySelector(".sdp-sidebar-right");
+  if (right && right.querySelector(".sdp-sidebar-toggle") && !right.classList.contains("sdp-collapsed")) {
+    right.dataset.sdpPanelCollapsed = "1";
+    setSidebarCollapsed(right, true);
+  }
+  placePanel();
   return panel;
+}
+
+// Just above the dock, whose height depends on whether the Stash badge is in it.
+function placePanel() {
+  const panel = document.getElementById("sdp-panel");
+  const dock = document.getElementById("sdp-dock");
+  if (!panel || !dock) return;
+  const bottom = Math.max(0, window.innerHeight - dock.getBoundingClientRect().top) + 12;
+  panel.style.bottom = `${bottom}px`;
+  panel.style.maxHeight = `calc(100vh - ${bottom + 160}px)`;
+}
+
+// Studio · date · performers, under the panel's title.
+function setPanelSubtitle(panel, scene) {
+  const bits = [];
+  if (scene.studio) bits.push(scene.studio);
+  if (scene.date) bits.push(scene.date);
+  if (scene.females && scene.females.length) bits.push(scene.females.join(", "));
+  const el = panel.querySelector(".sdp-subtitle");
+  el.textContent = bits.join(" · ");
+  el.title = el.textContent;
 }
 
 // Fills the collapsible "Details" section: the scene data behind the
@@ -761,6 +895,14 @@ function renderDetails(panel, state, queryStates, counts) {
   const scene = state.scene;
   const body = panel.querySelector(".sdp-details-body");
   body.innerHTML = "";
+
+  const failed = queryStates.filter((qs) => qs.status === "error").length;
+  const pending = queryStates.filter((qs) => qs.status === "pending").length;
+  const sum = [`${queryStates.length} quer${queryStates.length === 1 ? "y" : "ies"}`];
+  if (pending) sum.push(`${pending} running`);
+  if (failed) sum.push(`${failed} failed`);
+  if (counts) sum.push(`${counts.filtered} kept`);
+  panel.querySelector(".sdp-details-sum").textContent = sum.join(" · ");
 
   const addRow = (label, value) => {
     const row = document.createElement("div");
@@ -787,7 +929,7 @@ function renderDetails(panel, state, queryStates, counts) {
 
   for (const qs of queryStates) {
     const block = document.createElement("details");
-    block.className = "sdp-details-query";
+    block.className = `sdp-details-query sdp-q-${qs.status}`;
     block.open = qs.open === true;
     block.addEventListener("toggle", () => { qs.open = block.open; });
 
@@ -797,7 +939,10 @@ function renderDetails(panel, state, queryStates, counts) {
     if (qs.status === "pending") status = "searching…";
     else if (qs.status === "error") status = "failed";
     else status = `${qs.results.length} result${qs.results.length === 1 ? "" : "s"}`;
-    summary.textContent = `${qs.query} — ${status}`;
+    const text = document.createElement("span");
+    text.className = "sdp-details-query-text";
+    text.textContent = qs.query;
+    summary.append(text, status);
     block.appendChild(summary);
 
     const content = document.createElement("div");
@@ -830,16 +975,37 @@ function renderDetails(panel, state, queryStates, counts) {
   }
 }
 
-// The action button walks through 3 stages: 1 = show "🍆 Try Harder" (runs
-// SECOND_PASS_QUERIES), 2 = show "🍑 Last Chance..." (runs the Last Chance
+// The action button walks through 3 stages: 1 = show "Try harder" (runs
+// SECOND_PASS_QUERIES), 2 = show "Last chance" (runs the Last Chance
 // search), 3 = nothing left — hide the button and show a sign-off message
-// in its place instead.
-const NO_LUCK_HTML = `<div class="sdp-no-luck">🥱 Kein Glück. Zeit für Plan B: die eigene Hand.</div>`;
+// in its place instead. The pass steps at the top follow along.
+const NO_LUCK_HTML = `<div class="sdp-no-luck">Kein Glück. Zeit für Plan B: die eigene Hand.</div>`;
+
+// Stage 2's queries: the same idea as Stage 1 with parent studio and
+// aliases, minus anything Stage 1 already tried.
+function secondPassQueries(state) {
+  return [...new Set(SECOND_PASS_QUERIES.map((q) => q.build(state.scene)).filter(Boolean))]
+    .filter((q) => !state.triedQueries.has(q));
+}
+
+// `running`: the current stage's search is still going. Once the last one
+// is done, all three steps show as done.
+function updateSteps(panel, running) {
+  const state = panel._sdpState;
+  const stage = state ? state.stage : 1;
+  const finished = !!state && stage >= 3 && !running;
+  panel.querySelectorAll(".sdp-step").forEach((step, i) => {
+    step.classList.toggle("sdp-done", i + 1 < stage || finished);
+    step.classList.toggle("sdp-current", i + 1 === stage && !finished);
+  });
+}
 
 function updateActionButton(panel) {
   const foot = panel.querySelector(".sdp-panel-foot");
   const btn = foot.querySelector(".sdp-try-harder");
   const state = panel._sdpState;
+
+  updateSteps(panel, false);
 
   if (!state || state.stage >= 3) {
     btn.hidden = true;
@@ -850,7 +1016,14 @@ function updateActionButton(panel) {
   }
 
   btn.hidden = false;
-  btn.textContent = state.stage === 1 ? "🍆 Try Harder" : "🍑 Last Chance...";
+  let hint = "performers only";
+  if (state.stage === 1) {
+    const n = secondPassQueries(state).length;
+    hint = n ? `+${n} quer${n === 1 ? "y" : "ies"}` : "nothing new to try";
+  }
+  btn.innerHTML = `<span></span><span class="sdp-try-hint"></span>`;
+  btn.firstChild.textContent = state.stage === 1 ? "Try harder" : "Last chance";
+  btn.lastChild.textContent = hint;
 }
 
 // Status lines carry text from Prowlarr, Stash and StashDB, so they're built
@@ -873,7 +1046,7 @@ function fmtSize(bytes) {
 // Builds one result row (title, meta line with the match-criteria hit count
 // and publish-date proximity, download button) — shared by the main
 // results list and the per-query previews in the Details section. Takes
-// `state` (not just `scene`) so it can show "✓ Sent" for a release already
+// `state` (not just `scene`) so it can show "Sent" for a release already
 // grabbed, here or in any earlier search (see loadGrabbed).
 function buildResultRow(r, state) {
   const scene = state.scene;
@@ -885,13 +1058,13 @@ function buildResultRow(r, state) {
   // With more than one performer, show how much of the cast the release names ("Performer 2/3").
   const cast = scene.females.length > 1 ? ` ${countPerformers(releaseHay(r), scene)}/${scene.females.length}` : "";
   const matched = matchedCriteria(r, scene).map((label) => (label === "Performer" ? label + cast : label));
+  const total = applicableCriteria(scene).length;
   const meta = [];
-  if (r.indexer) meta.push(r.indexer);
   if (typeof r.seeders === "number") meta.push(`${r.seeders} seeders`);
   else if (typeof r.grabs === "number") meta.push(`${r.grabs} grabs`);
   if (r.size) meta.push(fmtSize(r.size));
+  if (r.indexer) meta.push(r.indexer);
   if (r.protocol) meta.push(r.protocol);
-  meta.push(`${matched.length}/${applicableCriteria(scene).length} hits (${matched.join(", ")})`);
   // Shown everywhere (not just Stage 3) so it can be eyeballed over time
   // without yet affecting scoring anywhere — see ageDistanceDays.
   meta.push(ageLabel(r, scene));
@@ -900,17 +1073,43 @@ function buildResultRow(r, state) {
   info.className = "sdp-info";
   info.innerHTML = `<div class="sdp-rel-title"></div><div class="sdp-rel-meta"></div>`;
   info.querySelector(".sdp-rel-title").textContent = r.title || "(untitled release)";
-  info.querySelector(".sdp-rel-meta").textContent = meta.join(" · ");
+  const metaEl = info.querySelector(".sdp-rel-meta");
+
+  // One segment per scene fact, lit for each the release matches.
+  const hits = document.createElement("span");
+  hits.className = `sdp-hits${matched.length === total ? " sdp-full" : ""}`;
+  hits.title = `${matched.length} of ${total} scene facts match${matched.length ? `: ${matched.join(", ")}` : ""}`;
+  const pips = document.createElement("span");
+  pips.className = "sdp-pips";
+  for (let i = 0; i < total; i++) {
+    const pip = document.createElement("span");
+    pip.className = `sdp-pip${i < matched.length ? " sdp-on" : ""}`;
+    pips.appendChild(pip);
+  }
+  const n = document.createElement("span");
+  n.textContent = `${matched.length}/${total}`;
+  hits.append(pips, n);
+  metaEl.appendChild(hits);
+  if (matched.length) {
+    const which = document.createElement("span");
+    which.className = "sdp-hits-which";
+    which.textContent = matched.join(", ");
+    metaEl.appendChild(which);
+  }
+  for (const bit of meta) {
+    const span = document.createElement("span");
+    span.textContent = bit;
+    metaEl.appendChild(span);
+  }
 
   const dl = document.createElement("button");
   dl.type = "button";
   dl.className = "sdp-dl";
   if (r.guid && state.grabbed.has(r.guid)) {
-    dl.textContent = "✓ Sent";
-    dl.classList.add("sdp-done");
+    setDownloadButton(dl, "sent");
     dl.disabled = true;
   } else {
-    dl.textContent = "Download";
+    setDownloadButton(dl, "idle");
     dl.addEventListener("click", () => grabRelease(dl, r, state));
   }
 
@@ -924,9 +1123,19 @@ function buildResultRow(r, state) {
 // so without this there'd be no way to tell whether what's on screen is
 // just Stage 1 or everything found so far.
 function stageLabel(state) {
-  if (state.stage === 1) return "Stage 1: automatic search";
-  if (state.stage === 2) return "Stage 1 + 2 (Try Harder)";
-  return "Last Chance — sorted by publish-date proximity";
+  if (state.stage === 1) return "Pass 1 · ranked by scene facts";
+  if (state.stage === 2) return "Pass 1 + 2 · ranked by scene facts";
+  return "Last chance · sorted by distance to the scene date";
+}
+
+// The download button's look per state; its text is static markup.
+function setDownloadButton(btn, state) {
+  btn.classList.toggle("sdp-done", state === "sent");
+  btn.classList.toggle("sdp-error", state === "failed");
+  if (state === "sent") btn.replaceChildren(icon("check"), textSpan("Sent"));
+  else if (state === "sending") btn.replaceChildren(textSpan("Sending…"));
+  else if (state === "failed") btn.replaceChildren(textSpan("Failed"));
+  else btn.replaceChildren(icon("download"), textSpan("Download"));
 }
 
 // Renders the result list into `panel` and returns { total, filtered }
@@ -973,7 +1182,14 @@ function renderResults(panel, results, state, opts = {}) {
       lastRes = res;
       const h = document.createElement("div");
       h.className = "sdp-group";
-      h.textContent = res === "other" ? "Other" : res;
+      const name = document.createElement("span");
+      name.className = "sdp-group-name";
+      name.textContent = res === "other" ? "Other" : res;
+      const n = sorted.filter((x) => resolutionOf(x) === res).length;
+      const count = document.createElement("span");
+      count.className = "sdp-group-count";
+      count.textContent = `${n} release${n === 1 ? "" : "s"}`;
+      h.append(name, count);
       body.appendChild(h);
     }
     body.appendChild(buildResultRow(r, state));
@@ -1022,24 +1238,21 @@ function renderLastChanceResults(panel, results, state) {
 // Returns { ok, error } so Auto-Download can report the outcome.
 async function grabRelease(btn, release, state) {
   btn.disabled = true;
-  btn.textContent = "Sending…";
+  setDownloadButton(btn, "sending");
   try {
     const resp = await browser.runtime.sendMessage({ type: "grab", release });
     if (resp && resp.ok) {
-      btn.textContent = "✓ Sent";
-      btn.classList.add("sdp-done");
+      setDownloadButton(btn, "sent");
       // background.js persists it; this covers the panel that's already open.
       if (release.guid) state.grabbed.add(release.guid);
       return { ok: true };
     }
-    btn.textContent = "Failed";
-    btn.classList.add("sdp-error");
+    setDownloadButton(btn, "failed");
     btn.title = (resp && resp.error) || "Grab failed";
     btn.disabled = false;
     return { ok: false, error: btn.title };
   } catch (e) {
-    btn.textContent = "Failed";
-    btn.classList.add("sdp-error");
+    setDownloadButton(btn, "failed");
     btn.title = e.message;
     btn.disabled = false;
     return { ok: false, error: e.message };
@@ -1060,7 +1273,7 @@ async function maybeAutoDownload(panel, state) {
   const status = messageDiv("sdp-auto-status", "");
   body.prepend(status);
   const say = (text, cls) => {
-    status.textContent = `⚡ Auto-Download: ${text}`;
+    status.textContent = `Auto-Download: ${text}`;
     if (cls) status.classList.add(cls);
   };
 
@@ -1142,9 +1355,12 @@ async function runQueryBatch(panel, state, queries, emptyMessage) {
   state.allQueryStates.push(...queries.map((query) => ({ query, status: "pending" })));
   renderDetails(panel, state, state.allQueryStates);
   body.innerHTML = LOADING_HTML;
+  let back = 0;
+  showSearchProgress(back, queries.length);
 
   await Promise.all(queries.map((query, i) =>
     prowlarrSearch(query).then((outcome) => {
+      showSearchProgress(++back, queries.length);
       // Carry over whatever the user set `open` to, so a query block they
       // expanded manually doesn't collapse again just because another query
       // elsewhere finished and triggered a re-render.
@@ -1193,6 +1409,7 @@ async function runLastChanceSearch(panel, state) {
   state.allQueryStates.push({ query, status: "pending" });
   renderDetails(panel, state, state.allQueryStates);
   body.innerHTML = LOADING_HTML;
+  showSearchProgress(0, 1);
 
   const outcome = await prowlarrSearch(query);
   if (!outcome.ok) {
@@ -1249,6 +1466,7 @@ function restorePanel(panel, entry, grabbed) {
   const state = entry.state;
   state.grabbed = new Set([...state.grabbed, ...grabbed]);
   panel._sdpState = state;
+  setPanelSubtitle(panel, state.scene);
   if (state.stage >= 3) {
     renderLastChanceResults(panel, state.allResults, state);
     renderDetails(panel, state, state.allQueryStates);
@@ -1271,6 +1489,7 @@ async function onSearchClick({ fresh = false, auto = true } = {}) {
   const btn = document.getElementById("sdp-button");
   if (btn.disabled) return;
   btn.disabled = true;
+  btn.innerHTML = `<span>Reading scene…</span>`;
   try {
     const sceneId = currentSceneId();
     if (!sceneId) return;
@@ -1286,6 +1505,7 @@ async function onSearchClick({ fresh = false, auto = true } = {}) {
     // sceneId, not a fresh URL read: the user may have moved on during the awaits.
     const scene = await resolveSceneForPanel(panel, sceneId);
     if (!scene) return;
+    setPanelSubtitle(panel, scene);
 
     const broadQueries = [...new Set(BROAD_QUERIES.map((q) => q.build(scene)).filter(Boolean))];
     const state = { scene, stage: 1, triedQueries: new Set(broadQueries), allResults: [], allQueryStates: [], grabbed };
@@ -1297,6 +1517,7 @@ async function onSearchClick({ fresh = false, auto = true } = {}) {
     if (auto) await maybeAutoDownload(panel, state);
   } finally {
     btn.disabled = false;
+    resetSearchButton();
   }
 }
 
@@ -1312,20 +1533,27 @@ async function onTryHarderClick() {
   if (!panel || !panel._sdpState) return;
   const state = panel._sdpState;
   const btn = panel.querySelector(".sdp-try-harder");
+  // The dock's button too: it shows this stage's progress, and a second
+  // search shouldn't start on top of this one.
+  const searchBtn = document.getElementById("sdp-button");
   btn.disabled = true;
+  if (searchBtn) searchBtn.disabled = true;
   try {
     if (state.stage === 1) {
-      const queries = [...new Set(SECOND_PASS_QUERIES.map((q) => q.build(state.scene)).filter(Boolean))]
-        .filter((q) => !state.triedQueries.has(q));
+      const queries = secondPassQueries(state);
       queries.forEach((q) => state.triedQueries.add(q));
       state.stage = 2;
+      updateSteps(panel, true);
       await runQueryBatch(panel, state, queries, "Nothing new to try — no parent studio or aliases available.");
     } else if (state.stage === 2) {
       state.stage = 3;
+      updateSteps(panel, true);
       await runLastChanceSearch(panel, state);
     }
     updateActionButton(panel);
   } finally {
     btn.disabled = false;
+    if (searchBtn) searchBtn.disabled = false;
+    resetSearchButton();
   }
 }

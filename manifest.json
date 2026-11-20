@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "stasharr",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "send scenes from StashDB to Prowlarr",
   "icons": {
     "48": "icons/icon.svg",
@@ -23,6 +23,9 @@
   "background": {
     "scripts": ["common.js", "background.js"]
   },
+  "web_accessible_resources": [
+    "fonts/*.woff2"
+  ],
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true

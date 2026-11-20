@@ -235,7 +235,7 @@ function sortResults(results, scene) {
     .map((x) => x.r);
 }
 
-// How long a release sent to Prowlarr keeps showing "✓ Sent".
+// How long a release sent to Prowlarr keeps showing "Sent".
 var GRABBED_MAX_AGE_MS = 90 * 86400000;
 
 // Returns a copy of a { guid: sentAt } map without entries older than maxAgeMs.
@@ -306,7 +306,7 @@ function stashMarkerPattern(stashUrl) {
 
 // The Stash performer custom field Stashboard's radar lives in: the day a
 // performer went on it, YYYY-MM-DD in local time. Stashboard shows "More
-// from …" rows for them; stasharr's 📡 sets and clears the same field.
+// from …" rows for them; stasharr's radar button sets and clears the same field.
 var RADAR_FIELD = "radar";
 
 function localIsoDate(date) {
