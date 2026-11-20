@@ -217,3 +217,14 @@ test("applicableCriteria drops Parent studio when the scene has none", () => {
   assert.equal(c.applicableCriteria({ ...scene, parentStudio: "" }).length, 4);
   assert.equal(c.applicableCriteria({ ...scene, parentStudio: scene.studio }).length, 4);
 });
+
+test("autoPickRelease takes the top-ranked release with every applicable hit", () => {
+  const noParent = { ...scene, parentStudio: "" };
+  const full720 = release("AcmeStudio.26.09.10.Jane.Doe.Weekend.Getaway.720p");
+  const full1080 = release("AcmeStudio.26.09.10.Jane.Doe.Weekend.Getaway.1080p");
+  const partial2160 = release("AcmeStudio.26.09.10.Jane.Doe.2160p");
+  assert.equal(c.autoPickRelease([full720, partial2160, full1080], noParent), full1080);
+  // With a parent studio, 4 of 5 isn't a full match.
+  assert.equal(c.autoPickRelease([full720, full1080], scene), null);
+  assert.equal(c.autoPickRelease([], noParent), null);
+});

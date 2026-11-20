@@ -174,6 +174,14 @@ function scoreRelease(release, scene) {
   return matchedCriteria(release, scene).length;
 }
 
+// Auto-Download's pick: of the releases matching every applicable criterion,
+// the one sortResults ranks first (highest resolution, then most of the cast
+// named, then most seeders/grabs). null if none matches them all.
+function autoPickRelease(results, scene) {
+  const full = applicableCriteria(scene).length;
+  return sortResults(results.filter((r) => scoreRelease(r, scene) === full), scene)[0] || null;
+}
+
 // Stage 3 ("Last Chance") only — deliberately NOT part of CRITERIA/
 // scoreRelease, so it never affects the MIN_SCORE filter or ranking
 // anywhere else. Compares a release's Prowlarr publish date against the
@@ -347,7 +355,7 @@ if (typeof module !== "undefined" && module.exports) {
     formatDateYYMMDD, cleanTitle, normalizeForMatch, foldText, hayHas, releaseHay, mergeResults,
     RES_ORDER, resolutionOf, performerNameSet, countPerformers, matchesDate,
     titleWords, matchesTitle, CRITERIA, applicableCriteria, MIN_SCORE,
-    matchedCriteria, scoreRelease, ageDistanceDays, ageLabel, sortByAgeProximity,
+    matchedCriteria, scoreRelease, autoPickRelease, ageDistanceDays, ageLabel, sortByAgeProximity,
     sortResults, GRABBED_MAX_AGE_MS, pruneGrabbed, FEMALE_GENDERS, SIDEBAR_PERFORMERS,
     SIDEBAR_SCENES, sidebarPerformers, stashSceneLabel, AUTO_SEARCH_HASH, stashMarkerPattern,
     RADAR_FIELD, localIsoDate, radarSince,

@@ -69,8 +69,10 @@ function syncButton() {
   if (sceneId === lastSceneId) return;
   lastSceneId = sceneId;
 
-  const existing = document.getElementById("sdp-button");
-  if (existing) existing.remove();
+  for (const id of ["sdp-button", "sdp-auto"]) {
+    const existing = document.getElementById(id);
+    if (existing) existing.remove();
+  }
   hideStashBadge();
   hidePerformerSidebars();
   closePanel();
@@ -79,12 +81,12 @@ function syncButton() {
     showPerformerSidebars(sceneId);
     // Stashboard's download buttons link here with AUTO_SEARCH_HASH: open
     // the panel and search right away. Searching is all it does; grabbing
-    // a release still takes a click.
+    // a release still takes a click, even with Auto-Download on.
     // A tick later: on page load this runs before the rest of this file
     // (and the constants the search uses) has been evaluated.
     if (location.hash === AUTO_SEARCH_HASH) {
       dropAutoSearchHash();
-      setTimeout(() => onSearchClick(), 0);
+      setTimeout(() => onSearchClick({ auto: false }), 0);
     }
   }
 }
@@ -126,11 +128,25 @@ function injectButton(sceneId) {
   btn.textContent = "⬇ Search Prowlarr";
   btn.addEventListener("click", () => onSearchClick());
   document.body.appendChild(btn);
+  injectAutoToggle();
 
   checkStashApp(sceneId).then((scene) => {
     // The user may have navigated away while the lookup was in flight.
     if (scene && currentSceneId() === sceneId) showStashBadge(scene);
   });
+}
+
+// The Auto-Download switch under the search button. Stored in
+// storage.local, so it stays as set across scenes, tabs and restarts.
+function injectAutoToggle() {
+  const wrap = document.createElement("label");
+  wrap.id = "sdp-auto";
+  wrap.title = "After a search, download the top release with every hit automatically";
+  wrap.innerHTML = `<input type="checkbox"><span class="sdp-switch"></span><span>Auto-Download</span>`;
+  const input = wrap.querySelector("input");
+  browser.storage.local.get({ autoDownload: false }).then(({ autoDownload }) => { input.checked = autoDownload; });
+  input.addEventListener("change", () => browser.storage.local.set({ autoDownload: input.checked }));
+  document.body.appendChild(wrap);
 }
 
 /* ------------------------------------------------------------------ *
@@ -863,6 +879,8 @@ function buildResultRow(r, state) {
   const scene = state.scene;
   const row = document.createElement("div");
   row.className = "sdp-row";
+  // So Auto-Download can find the row of the release it picked.
+  row._sdpRelease = r;
 
   // With more than one performer, show how much of the cast the release names ("Performer 2/3").
   const cast = scene.females.length > 1 ? ` ${countPerformers(releaseHay(r), scene)}/${scene.females.length}` : "";
@@ -1001,6 +1019,7 @@ function renderLastChanceResults(panel, results, state) {
   }
 }
 
+// Returns { ok, error } so Auto-Download can report the outcome.
 async function grabRelease(btn, release, state) {
   btn.disabled = true;
   btn.textContent = "Sending…";
@@ -1011,18 +1030,58 @@ async function grabRelease(btn, release, state) {
       btn.classList.add("sdp-done");
       // background.js persists it; this covers the panel that's already open.
       if (release.guid) state.grabbed.add(release.guid);
-    } else {
-      btn.textContent = "Failed";
-      btn.classList.add("sdp-error");
-      btn.title = (resp && resp.error) || "Grab failed";
-      btn.disabled = false;
+      return { ok: true };
     }
+    btn.textContent = "Failed";
+    btn.classList.add("sdp-error");
+    btn.title = (resp && resp.error) || "Grab failed";
+    btn.disabled = false;
+    return { ok: false, error: btn.title };
   } catch (e) {
     btn.textContent = "Failed";
     btn.classList.add("sdp-error");
     btn.title = e.message;
     btn.disabled = false;
+    return { ok: false, error: e.message };
   }
+}
+
+// Auto-Download: after a search, grabs the release autoPickRelease picks
+// (every applicable hit, highest resolution, top of the list) through its
+// own row's button, and says above the list what it did or why it didn't.
+// Never twice for a scene: if any full-hit release was already sent, it
+// leaves it at that.
+async function maybeAutoDownload(panel, state) {
+  const { autoDownload } = await browser.storage.local.get({ autoDownload: false });
+  // The panel may have been closed or replaced (another scene) meanwhile.
+  if (!autoDownload || !state.allResults.length || !panel.isConnected) return;
+
+  const body = panel.querySelector(".sdp-body");
+  const status = messageDiv("sdp-auto-status", "");
+  body.prepend(status);
+  const say = (text, cls) => {
+    status.textContent = `⚡ Auto-Download: ${text}`;
+    if (cls) status.classList.add(cls);
+  };
+
+  const scene = state.scene;
+  const full = applicableCriteria(scene).length;
+  const sent = state.allResults.find((r) => r.guid && state.grabbed.has(r.guid) && scoreRelease(r, scene) === full);
+  if (sent) return say(`already sent "${sent.title}" — nothing new downloaded.`);
+
+  const pick = autoPickRelease(state.allResults, scene);
+  if (!pick) return say(`no release with all ${full}/${full} hits — pick one yourself.`);
+
+  const row = [...body.querySelectorAll(".sdp-row")].find((el) => el._sdpRelease === pick);
+  if (!row) return say(`couldn't find the row for "${pick.title}".`, "sdp-error");
+  row.classList.add("sdp-auto-pick");
+  row.scrollIntoView({ block: "nearest" });
+
+  const label = `"${pick.title}" (${resolutionOf(pick)}, ${full}/${full} hits)`;
+  say(`sending ${label}…`);
+  const outcome = await grabRelease(row.querySelector(".sdp-dl"), pick, state);
+  if (outcome.ok) say(`sent ${label} to Prowlarr.`, "sdp-done");
+  else say(`sending ${label} failed: ${outcome.error}`, "sdp-error");
 }
 
 /* ------------------------------------------------------------------ *
@@ -1207,7 +1266,8 @@ function restorePanel(panel, entry, grabbed) {
 // covers the panel's ↻ button, which reuses this handler. Re-enables in
 // `finally` even if something above throws, so a failure never leaves the
 // button stuck.
-async function onSearchClick({ fresh = false } = {}) {
+// `auto: false` (Stashboard's auto-search link) skips Auto-Download.
+async function onSearchClick({ fresh = false, auto = true } = {}) {
   const btn = document.getElementById("sdp-button");
   if (btn.disabled) return;
   btn.disabled = true;
@@ -1219,6 +1279,7 @@ async function onSearchClick({ fresh = false } = {}) {
     const cached = fresh ? null : cachedScene(sceneId);
     if (cached) {
       restorePanel(panel, cached, grabbed);
+      if (auto) await maybeAutoDownload(panel, cached.state);
       return;
     }
 
@@ -1233,6 +1294,7 @@ async function onSearchClick({ fresh = false } = {}) {
 
     await runQueryBatch(panel, state, broadQueries, "No performers or title found for this scene.");
     updateActionButton(panel);
+    if (auto) await maybeAutoDownload(panel, state);
   } finally {
     btn.disabled = false;
   }
