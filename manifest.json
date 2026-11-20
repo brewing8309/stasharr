@@ -10,7 +10,12 @@
   "permissions": [
     "storage",
     "contextMenus",
-    "<all_urls>"
+    "activeTab",
+    "https://stashdb.org/*"
+  ],
+  "optional_permissions": [
+    "http://*/*",
+    "https://*/*"
   ],
   "content_scripts": [
     {

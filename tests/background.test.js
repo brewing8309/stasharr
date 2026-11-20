@@ -9,7 +9,10 @@ const vm = require("node:vm");
 const root = path.join(__dirname, "..");
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function loadBackground({ fetch, settings = {} }) {
+const STASHDB_SENDER = { id: "{ext}", url: "https://stashdb.org/scenes/1" };
+
+// `granted` is null for "every host" or a list of granted match patterns.
+function loadBackground({ fetch, settings = {}, granted = null }) {
   const store = { prowlarrUrl: "http://prowlarr", apiKey: "key", ...settings };
   let onMessage;
   const storageListeners = [];
@@ -41,7 +44,19 @@ function loadBackground({ fetch, settings = {} }) {
       }
     },
     contextMenus: { create() {}, onClicked: { addListener() {} } },
-    runtime: { onMessage: { addListener: (fn) => { onMessage = fn; } } },
+    permissions: {
+      async contains({ origins }) {
+        return granted === null || origins.every((o) => granted.includes(o));
+      },
+      onAdded: { addListener() {} },
+      onRemoved: { addListener() {} }
+    },
+    runtime: {
+      id: "{ext}",
+      getURL: (p) => `moz-extension://abc/${p}`,
+      onMessage: { addListener: (fn) => { onMessage = fn; } },
+      onInstalled: { addListener() {} }
+    },
     tabs: {}
   };
   const context = vm.createContext({
@@ -54,7 +69,7 @@ function loadBackground({ fetch, settings = {} }) {
   // objects from the background script's own realm.
   return {
     store, registered, browser,
-    send: async (msg) => JSON.parse(JSON.stringify(await onMessage(msg))),
+    send: async (msg, sender = STASHDB_SENDER) => JSON.parse(JSON.stringify(await onMessage(msg, sender))),
     settle: async () => { for (let i = 0; i < 30; i++) await tick(); }
   };
 }
@@ -331,4 +346,36 @@ test("📡 only takes numeric Stash performer IDs", async () => {
   const resp = await send({ type: "stashRadar", performerId: "1) { id } x: performerDestroy(", on: true });
   assert.equal(resp.ok, false);
   assert.equal(calls, 0);
+});
+
+test("messages from pages other than stashdb.org and the extension are refused", async () => {
+  let fetched = 0;
+  const { send } = loadBackground({ fetch: async () => { fetched++; return ok("[]"); } });
+  const evil = await send({ type: "grab", release: { guid: "a", indexerId: 1 } }, { id: "{ext}", url: "https://evil.example/" });
+  assert.equal(evil.ok, false);
+  const options = await send({ type: "search", query: "x" }, { id: "{ext}", url: "moz-extension://abc/options.html" });
+  assert.equal(options.ok, true);
+  assert.equal(fetched, 1, "only the options page request went out");
+});
+
+test("without host permission for Prowlarr nothing is sent and the error says what to do", async () => {
+  let fetched = 0;
+  const { send } = loadBackground({ fetch: async () => { fetched++; return ok("[]"); }, granted: [] });
+  const result = await send({ type: "search", query: "x" });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /no access to Prowlarr/);
+  assert.equal(fetched, 0);
+});
+
+test("a timeout names the path, not the user's host", async () => {
+  const { send } = loadBackground({
+    settings: { requestTimeout: "1", prowlarrUrl: "http://10.10.1.5:9696" },
+    fetch: (url, { signal }) => new Promise((_, reject) => signal.addEventListener("abort", () => {
+      const e = new Error("aborted"); e.name = "AbortError"; reject(e);
+    }))
+  });
+  const result = await send({ type: "test" });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /timed out after 1s: \/api\/v1\/system\/status$/);
+  assert.doesNotMatch(result.error, /10\.10\.1\.5/);
 });

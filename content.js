@@ -156,7 +156,7 @@ function injectButton(sceneId) {
   const btn = document.createElement("button");
   btn.id = "sdp-button";
   btn.type = "button";
-  btn.addEventListener("click", () => onSearchClick());
+  btn.addEventListener("click", userOnly(() => onSearchClick()));
   row.append(btn, autoToggle());
   dock.appendChild(row);
   document.body.appendChild(dock);
@@ -178,7 +178,14 @@ function autoToggle() {
   wrap.innerHTML = `<input type="checkbox" aria-label="Auto-Download"><span class="sdp-switch"></span><span class="sdp-auto-label">Auto-DL</span>`;
   const input = wrap.querySelector("input");
   browser.storage.local.get({ autoDownload: false }).then(({ autoDownload }) => { input.checked = autoDownload; });
-  input.addEventListener("change", () => browser.storage.local.set({ autoDownload: input.checked }));
+  // A page script can flip the box with input.click(); only the user may.
+  input.addEventListener("change", (e) => {
+    if (!e.isTrusted) {
+      input.checked = !input.checked;
+      return;
+    }
+    browser.storage.local.set({ autoDownload: input.checked });
+  });
   // Other open StashDB tabs follow when the switch is flipped in one of them.
   browser.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && changes.autoDownload) input.checked = !!changes.autoDownload.newValue;
@@ -409,6 +416,15 @@ async function showPerformerSidebars(sceneId) {
   }
 }
 
+// For buttons that search, download or change Stash. stashdb.org's own
+// scripts can reach this DOM and fire click events on it (e.g. after an XSS
+// there); those arrive with isTrusted false and are ignored.
+function userOnly(handler) {
+  return (e) => {
+    if (e && e.isTrusted) return handler(e);
+  };
+}
+
 function newTabLink(className, href) {
   const a = document.createElement("a");
   a.className = className;
@@ -535,7 +551,7 @@ function radarButton(performer) {
     else button.title = `Put ${performer.name} on your Stashboard radar: not a favourite, but more of them on your Stash front page`;
   };
   show(null);
-  button.addEventListener("click", async () => {
+  button.addEventListener("click", userOnly(async () => {
     button.disabled = true;
     let error = null;
     try {
@@ -547,7 +563,7 @@ function radarButton(performer) {
     }
     button.disabled = false;
     show(error);
-  });
+  }));
   return button;
 }
 
@@ -848,8 +864,8 @@ function ensurePanel() {
     steps.appendChild(step);
   });
   panel.querySelector(".sdp-close").addEventListener("click", closePanel);
-  panel.querySelector(".sdp-refresh").addEventListener("click", () => onSearchClick({ fresh: true }));
-  panel.querySelector(".sdp-try-harder").addEventListener("click", onTryHarderClick);
+  panel.querySelector(".sdp-refresh").addEventListener("click", userOnly(() => onSearchClick({ fresh: true })));
+  panel.querySelector(".sdp-try-harder").addEventListener("click", userOnly(onTryHarderClick));
   document.body.appendChild(panel);
 
   const right = document.querySelector(".sdp-sidebar-right");
@@ -1115,7 +1131,7 @@ function buildResultRow(r, state) {
     dl.disabled = true;
   } else {
     setDownloadButton(dl, "idle");
-    dl.addEventListener("click", () => grabRelease(dl, r, state));
+    dl.addEventListener("click", userOnly(() => grabRelease(dl, r, state)));
   }
 
   row.appendChild(info);

@@ -3,8 +3,8 @@
  *
  * Content scripts on stashdb.org cannot talk to a Prowlarr or Stash instance
  * directly (cross-origin), so all requests are proxied through here. The
- * <all_urls> host permission lets us reach whatever URLs the user configured
- * on the options page.
+ * options page asks for host permission on exactly the URLs the user
+ * configured (optional_permissions), nothing broader.
  */
 
 const DEFAULTS = {
@@ -58,11 +58,28 @@ async function fetchWithTimeout(url, options) {
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (e) {
     if (e.name === "AbortError") {
-      throw new Error(`Request timed out after ${timeoutMs / 1000}s: ${url}`);
+      // Path only: the message ends up on stashdb.org's page, and the host is
+      // the user's own network.
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s: ${new URL(url).pathname}`);
     }
     throw e;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+// Errors are shown on stashdb.org's page, so only a short piece of a
+// backend's answer goes into them.
+const ERROR_BODY_CHARS = 150;
+
+// Prowlarr and Stash are reached through optional host permissions the
+// options page asks for on Save, not a blanket <all_urls>. Without it the
+// request would fail as a bare CORS error, so say what to do instead.
+async function ensureHostAccess(base, product) {
+  const pattern = hostPattern(base);
+  if (!pattern) throw new Error(`${product} URL must start with http:// or https://. Open the extension options.`);
+  if (!(await browser.permissions.contains({ origins: [pattern] }))) {
+    throw new Error(`stasharr has no access to ${product} yet. Open the extension options and press Save settings.`);
   }
 }
 
@@ -71,6 +88,7 @@ async function prowlarrFetch(path, { method = "GET", body = null } = {}) {
   const base = normalizeBase(cfg.prowlarrUrl);
   if (!base) throw new Error("Prowlarr URL is not configured. Open the extension options.");
   if (!cfg.apiKey) throw new Error("Prowlarr API key is not configured. Open the extension options.");
+  await ensureHostAccess(base, "Prowlarr");
 
   const res = await fetchWithTimeout(base + path, {
     method,
@@ -84,7 +102,7 @@ async function prowlarrFetch(path, { method = "GET", body = null } = {}) {
 
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Prowlarr ${method} ${path} failed: ${res.status} ${res.statusText}${text ? " – " + text.slice(0, 300) : ""}`);
+    throw new Error(`Prowlarr ${method} ${path} failed: ${res.status} ${res.statusText}${text ? " – " + text.slice(0, ERROR_BODY_CHARS) : ""}`);
   }
   return text ? JSON.parse(text) : null;
 }
@@ -153,6 +171,7 @@ async function stashFetch(query, variables) {
   const cfg = await getConfig();
   const base = normalizeBase(cfg.stashUrl);
   if (!base) throw new Error("Stash URL is not configured. Open the extension options.");
+  await ensureHostAccess(base, "Stash");
 
   const res = await fetchWithTimeout(base + "/graphql", {
     method: "POST",
@@ -166,7 +185,7 @@ async function stashFetch(query, variables) {
 
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Stash request failed: ${res.status} ${res.statusText}${text ? " – " + text.slice(0, 300) : ""}`);
+    throw new Error(`Stash request failed: ${res.status} ${res.statusText}${text ? " – " + text.slice(0, ERROR_BODY_CHARS) : ""}`);
   }
   const json = text ? JSON.parse(text) : null;
   if (json && json.errors && json.errors.length) {
@@ -311,6 +330,7 @@ async function stashSceneThumb(sceneId) {
   const base = normalizeBase(cfg.stashUrl);
   if (!base) throw new Error("Stash URL is not configured. Open the extension options.");
   if (!/^\d+$/.test(String(sceneId))) throw new Error(`Invalid Stash scene ID: ${sceneId}`);
+  await ensureHostAccess(base, "Stash");
 
   const res = await fetchWithTimeout(`${base}/scene/${sceneId}/screenshot`, { headers: stashAuthHeaders(cfg) });
   if (!res.ok) throw new Error(`Stash screenshot request failed: ${res.status} ${res.statusText}`);
@@ -404,6 +424,7 @@ function updateStashMarker() {
     }
     const pattern = stashMarkerPattern((await getConfig()).stashUrl);
     if (!pattern || !browser.contentScripts) return;
+    if (!(await browser.permissions.contains({ origins: [pattern] }))) return;
     stashMarker = await browser.contentScripts.register({
       matches: [pattern],
       js: [{ file: "stash-marker.js" }],
@@ -416,7 +437,22 @@ function updateStashMarker() {
 browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.stashUrl) updateStashMarker();
 });
+// Access to the Stash host can be granted after its URL was saved.
+browser.permissions.onAdded.addListener(() => updateStashMarker());
+browser.permissions.onRemoved.addListener(() => updateStashMarker());
 updateStashMarker();
+
+// Up to 1.8.x stasharr held <all_urls>; now each configured host is granted
+// on the options page. After an update without that grant, open the options
+// page so a single Save restores access, instead of every search failing.
+browser.runtime.onInstalled.addListener(async ({ reason }) => {
+  if (reason !== "update") return;
+  const cfg = await getConfig();
+  const patterns = [cfg.prowlarrUrl, cfg.stashUrl].map(hostPattern).filter(Boolean);
+  if (patterns.length && !(await browser.permissions.contains({ origins: patterns }))) {
+    browser.runtime.openOptionsPage();
+  }
+});
 
 // Radar button: puts a Stash performer on Stashboard's radar (the custom field
 // RADAR_FIELD, set to today) or takes them off. Only that field changes.
@@ -451,7 +487,7 @@ async function stashdbFetch(query, variables) {
   });
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`StashDB request failed: ${res.status} ${res.statusText}${text ? " – " + text.slice(0, 300) : ""}`);
+    throw new Error(`StashDB request failed: ${res.status} ${res.statusText}${text ? " – " + text.slice(0, ERROR_BODY_CHARS) : ""}`);
   }
   const json = text ? JSON.parse(text) : null;
   if (json && json.errors && json.errors.length) {
@@ -524,7 +560,10 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
   }
 });
 
-browser.runtime.onMessage.addListener((msg) => {
+browser.runtime.onMessage.addListener((msg, sender) => {
+  if (!isTrustedSender(sender, browser.runtime.id, browser.runtime.getURL(""))) {
+    return Promise.resolve({ ok: false, error: "Not allowed from this page" });
+  }
   switch (msg && msg.type) {
     case "search":
       return search(msg.query).then(

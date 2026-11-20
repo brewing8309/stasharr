@@ -74,6 +74,8 @@
     .status.ok::before { background: var(--owned); }
     .status.err { color: var(--fault); }
     .status.err::before { background: var(--fault); }
+    .hint.warn { color: var(--signal-hi); }
+    .hint.warn:empty { display: none; }
   </style>
 </head>
 <body>
@@ -110,6 +112,7 @@
             <label for="prowlarrUrl">URL</label>
             <input id="prowlarrUrl" type="text" placeholder="http://localhost:9696" />
             <span class="hint">Base URL of your Prowlarr instance, no trailing slash.</span>
+            <span class="hint warn" id="prowlarrUrlWarn"></span>
           </div>
           <div class="field">
             <label for="apiKey">API key</label>
@@ -156,6 +159,7 @@
             <label for="stashUrl">URL</label>
             <input id="stashUrl" type="text" placeholder="http://localhost:9999" />
             <span class="hint">Base URL of your StashApp instance, no trailing slash.</span>
+            <span class="hint warn" id="stashUrlWarn"></span>
           </div>
           <div class="field">
             <label for="stashApiKey">API key</label>
@@ -177,6 +181,7 @@
     </main>
   </div>
 
+  <script src="common.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

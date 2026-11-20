@@ -48,3 +48,22 @@ test("the options page shows the vibecoded notice", () => {
   const flat = (s) => s.replace(/<[^>]+>/g, "").replace(/^> ?/gm, "").replace(/\s+/g, " ");
   assert.ok(flat(read("options.html")).includes(notice), "options.html");
 });
+
+test("no blanket host permission: Prowlarr/Stash hosts are optional, granted on Save", () => {
+  assert.ok(!manifest.permissions.includes("<all_urls>"));
+  assert.ok(!manifest.permissions.some((p) => /^\*:\/\/\*\/|^https?:\/\/\*\//.test(p)), "no wildcard host in required permissions");
+  assert.deepEqual(manifest.optional_permissions, ["http://*/*", "https://*/*"]);
+});
+
+test("content.js: buttons that search, download or change Stash ignore synthetic clicks", () => {
+  const src = read("content.js");
+  for (const call of ["onSearchClick(", "grabRelease(dl", "onTryHarderClick", "async () => {\n    button.disabled"]) {
+    const re = new RegExp(`addEventListener\\("click", (?!userOnly\\()[^\\n]*${call.replace(/[()]/g, "\\$&").split("\n")[0]}`);
+    assert.ok(!re.test(src), `unguarded click handler: ${call}`);
+  }
+  assert.match(src, /e && e\.isTrusted/);
+});
+
+test("the options page loads common.js before options.js", () => {
+  assert.match(read("options.html"), /<script src="common\.js"><\/script>\s*<script src="options\.js"><\/script>/);
+});

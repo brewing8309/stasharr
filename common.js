@@ -283,19 +283,57 @@ function stashSceneLabel(scene) {
 // away — what Stashboard's download buttons link to.
 var AUTO_SEARCH_HASH = "#stasharr-search";
 
-// The match pattern for stash-marker.js, which tells Stash pages (e.g.
-// Stashboard) that stasharr is installed. Host only: Firefox match patterns
-// can't hold a port (bug 1362809) and match any, so stash-marker.js checks
-// the exact origin itself.
-function stashMarkerPattern(stashUrl) {
+// The match pattern covering a configured Prowlarr/Stash URL: what the
+// options page asks host permission for, and where stash-marker.js runs.
+// Host only: Firefox match patterns can't hold a port (bug 1362809) and
+// match any, so stash-marker.js checks the exact origin itself.
+function hostPattern(urlString) {
   let url;
   try {
-    url = new URL(String(stashUrl || "").trim());
+    url = new URL(String(urlString || "").trim());
   } catch (e) {
     return null;
   }
   if ((url.protocol !== "http:" && url.protocol !== "https:") || !url.hostname) return null;
   return `${url.protocol}//${url.hostname}/*`;
+}
+
+// The match pattern for stash-marker.js, which tells Stash pages (e.g.
+// Stashboard) that stasharr is installed.
+function stashMarkerPattern(stashUrl) {
+  return hostPattern(stashUrl);
+}
+
+// True for a plain-http URL that leaves this machine: an API key sent there
+// can be read by anyone on the network path. localhost and loopback count
+// as local; private LAN addresses don't (Wi-Fi, other devices).
+function isCleartextRemote(urlString) {
+  let url;
+  try {
+    url = new URL(String(urlString || "").trim());
+  } catch (e) {
+    return false;
+  }
+  if (url.protocol !== "http:") return false;
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  return !(host === "localhost" || host.endsWith(".localhost") || /^127\./.test(host) || host === "::1");
+}
+
+// Which runtime messages background.js answers: only from this extension's
+// own pages (options) and its content script on stashdb.org. Content scripts
+// injected elsewhere (picker.js on any page, stash-marker.js on Stash) never
+// send any, so a message from those pages is refused.
+function isTrustedSender(sender, extensionId, extensionBaseUrl) {
+  if (!sender || sender.id !== extensionId) return false;
+  const url = String(sender.url || "");
+  if (extensionBaseUrl && url.startsWith(extensionBaseUrl)) return true;
+  let origin;
+  try {
+    origin = new URL(url).origin;
+  } catch (e) {
+    return false;
+  }
+  return origin === "https://stashdb.org";
 }
 
 /* ------------------------------------------------------------------ *
@@ -356,6 +394,7 @@ if (typeof module !== "undefined" && module.exports) {
     matchedCriteria, scoreRelease, autoPickRelease, ageDistanceDays, ageLabel, sortByAgeProximity,
     sortResults, GRABBED_MAX_AGE_MS, pruneGrabbed, FEMALE_GENDERS, SIDEBAR_PERFORMERS,
     SIDEBAR_SCENES, sidebarPerformers, stashSceneLabel, AUTO_SEARCH_HASH, stashMarkerPattern,
+    hostPattern, isCleartextRemote, isTrustedSender,
     RADAR_FIELD, localIsoDate, radarSince,
     cleanSelectionText
   };

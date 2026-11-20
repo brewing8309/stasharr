@@ -21,9 +21,13 @@
 and is only sent to the Prowlarr URL you typed. There is no stasharr server and no telemetry; the
 manifest declares `data_collection_permissions: none`.
 
-**Why `<all_urls>`?** Your Prowlarr and Stash live on addresses only you know (LAN IPs, your own
-domains), so Firefox can only be told to allow cross-origin requests broadly. The code only ever
-contacts stashdb.org, your Prowlarr and your Stash — read `background.js` to verify.
+**Which sites can it reach?** Only stashdb.org by default. When you press **Save settings**, Firefox
+asks for access to the hosts of the Prowlarr and Stash URLs you entered, and nothing else. After
+changing a URL, Save again to grant the new host. Firefox lists the granted hosts under
+about:addons → stasharr → Permissions.
+
+**"stasharr has no access to Prowlarr yet"** — the host permission is missing (e.g. after the update
+from 1.8, which dropped the blanket `<all_urls>`). Open the preferences and press **Save settings**.
 
 **Does it work on Chrome, Edge or Android?** No. It's a Firefox Manifest v2 extension; desktop
 Firefox only.

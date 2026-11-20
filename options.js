@@ -11,6 +11,47 @@ async function load() {
   $("requestTimeout").value = cfg.requestTimeout ?? "25";
   $("stashUrl").value = cfg.stashUrl || "";
   $("stashApiKey").value = cfg.stashApiKey || "";
+  showUrlWarnings();
+  const missing = await missingAccess();
+  if (missing.length) {
+    setStatus(`No access to ${missing.join(" and ")} yet: press Save settings and allow it.`, "err");
+  }
+}
+
+const URL_FIELDS = [["prowlarrUrl", "Prowlarr"], ["stashUrl", "Stash"]];
+
+// The host patterns for the URLs as typed, for the permission request.
+function accessPatterns() {
+  return URL_FIELDS.map(([id]) => hostPattern($(id).value)).filter(Boolean);
+}
+
+async function missingAccess() {
+  const missing = [];
+  for (const [id, product] of URL_FIELDS) {
+    const pattern = hostPattern($(id).value);
+    if (pattern && !(await browser.permissions.contains({ origins: [pattern] }))) missing.push(product);
+  }
+  return missing;
+}
+
+// Firefox only shows the permission prompt when it's asked for straight from
+// the click, before anything has been awaited, so handlers call this first.
+function requestAccess() {
+  const origins = accessPatterns();
+  return origins.length ? browser.permissions.request({ origins }) : Promise.resolve(true);
+}
+
+function showUrlWarnings() {
+  for (const [id, product] of URL_FIELDS) {
+    const value = $(id).value.trim();
+    let warning = "";
+    if (value && !hostPattern(value)) {
+      warning = "Must start with http:// or https://.";
+    } else if (isCleartextRemote(value)) {
+      warning = `Plain http: the ${product} API key travels unencrypted over the network. Prefer https.`;
+    }
+    $(`${id}Warn`).textContent = warning;
+  }
 }
 
 function setStatus(msg, cls, id = "status") {
@@ -19,7 +60,13 @@ function setStatus(msg, cls, id = "status") {
   el.className = `status ${cls || ""}`.trim();
 }
 
-async function save() {
+async function save(access = Promise.resolve(true)) {
+  showUrlWarnings();
+  for (const [id, product] of URL_FIELDS) {
+    const value = $(id).value.trim();
+    if (value && !hostPattern(value)) throw new Error(`${product} URL must start with http:// or https://.`);
+  }
+  const granted = await access;
   const limit = parseInt($("searchLimit").value, 10);
   const timeout = parseInt($("requestTimeout").value, 10);
   await browser.storage.local.set({
@@ -31,15 +78,16 @@ async function save() {
     stashUrl: $("stashUrl").value.trim().replace(/\/+$/, ""),
     stashApiKey: $("stashApiKey").value.trim()
   });
+  if (!granted) throw new Error("Saved, but access was not allowed: stasharr can't reach Prowlarr or Stash until you do.");
   setStatus("Saved.", "ok");
 }
 
 // A rejected sendMessage (background not ready, extension just reloaded)
 // would otherwise leave "Testing…" on screen with the error only in the console.
 // The result shows next to the section's own Test button.
-async function testConnection(type, product, statusId) {
+async function testConnection(type, product, statusId, access) {
   try {
-    await save();
+    await save(access);
     setStatus("Testing…", "", statusId);
     const resp = await browser.runtime.sendMessage({ type });
     if (resp && resp.ok) {
@@ -52,8 +100,9 @@ async function testConnection(type, product, statusId) {
   }
 }
 
-$("save").addEventListener("click", () => save().catch((e) => setStatus(e.message, "err")));
-$("test").addEventListener("click", () => testConnection("test", "Prowlarr", "statusProwlarr"));
-$("testStash").addEventListener("click", () => testConnection("testStash", "Stash", "statusStash"));
+$("save").addEventListener("click", () => save(requestAccess()).catch((e) => setStatus(e.message, "err")));
+$("test").addEventListener("click", () => testConnection("test", "Prowlarr", "statusProwlarr", requestAccess()));
+$("testStash").addEventListener("click", () => testConnection("testStash", "Stash", "statusStash", requestAccess()));
+for (const [id] of URL_FIELDS) $(id).addEventListener("input", showUrlWarnings);
 $("version").textContent = `v${browser.runtime.getManifest().version} · settings`;
 load().catch((e) => setStatus(`Could not load settings: ${e.message}`, "err"));

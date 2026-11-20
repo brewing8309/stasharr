@@ -1,0 +1,12 @@
+{
+  "name": "stasharr",
+  "private": true,
+  "description": "Not a build: pins web-ext for the release workflow (lint + signing) via package-lock.json. The extension itself has no dependencies.",
+  "license": "CC-BY-NC-4.0",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "web-ext": "10.7.0"
+  }
+}

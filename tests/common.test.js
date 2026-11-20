@@ -226,3 +226,33 @@ test("autoPickRelease takes the top-ranked release with every applicable hit", (
   assert.equal(c.autoPickRelease([full720, full1080], scene), full1080);
   assert.equal(c.autoPickRelease([], noParent), null);
 });
+
+test("hostPattern: http(s) host for any port, nothing else", () => {
+  assert.equal(c.hostPattern("http://10.10.1.5:9696"), "http://10.10.1.5/*");
+  assert.equal(c.hostPattern("https://prowlarr.example.org/sub/"), "https://prowlarr.example.org/*");
+  assert.equal(c.hostPattern("javascript:alert(1)"), null);
+  assert.equal(c.hostPattern("file:///etc/passwd"), null);
+  assert.equal(c.hostPattern(""), null);
+});
+
+test("isCleartextRemote: plain http off this machine only", () => {
+  assert.equal(c.isCleartextRemote("http://10.10.1.5:9696"), true);
+  assert.equal(c.isCleartextRemote("http://stash.lan"), true);
+  assert.equal(c.isCleartextRemote("https://10.10.1.5:9696"), false);
+  assert.equal(c.isCleartextRemote("http://localhost:9696"), false);
+  assert.equal(c.isCleartextRemote("http://127.0.0.1:9999"), false);
+  assert.equal(c.isCleartextRemote("http://[::1]:9999"), false);
+  assert.equal(c.isCleartextRemote(""), false);
+});
+
+test("isTrustedSender: own pages and stashdb.org only", () => {
+  const id = "{ext}";
+  const base = "moz-extension://abc/";
+  assert.equal(c.isTrustedSender({ id, url: "moz-extension://abc/options.html" }, id, base), true);
+  assert.equal(c.isTrustedSender({ id, url: "https://stashdb.org/scenes/1" }, id, base), true);
+  assert.equal(c.isTrustedSender({ id, url: "https://evil.example/" }, id, base), false, "picker.js page");
+  assert.equal(c.isTrustedSender({ id, url: "http://10.10.1.5:9999/" }, id, base), false, "Stash page");
+  assert.equal(c.isTrustedSender({ id, url: "https://stashdb.org.evil.example/" }, id, base), false);
+  assert.equal(c.isTrustedSender({ id: "{other}", url: "https://stashdb.org/" }, id, base), false);
+  assert.equal(c.isTrustedSender(null, id, base), false);
+});
