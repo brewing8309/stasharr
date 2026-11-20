@@ -810,7 +810,7 @@ function renderDetails(panel, state, queryStates, counts) {
   }
 
   if (counts) {
-    addRow("Results", `${counts.total} found across all queries, ${counts.filtered} passed the ≥ ${MIN_SCORE}/${CRITERIA.length} filter`);
+    addRow("Results", `${counts.total} found across all queries, ${counts.filtered} passed the ≥ ${MIN_SCORE}/${applicableCriteria(state.scene).length} filter`);
   }
 }
 
@@ -873,7 +873,7 @@ function buildResultRow(r, state) {
   else if (typeof r.grabs === "number") meta.push(`${r.grabs} grabs`);
   if (r.size) meta.push(fmtSize(r.size));
   if (r.protocol) meta.push(r.protocol);
-  meta.push(`${matched.length}/${CRITERIA.length} hits (${matched.join(", ")})`);
+  meta.push(`${matched.length}/${applicableCriteria(scene).length} hits (${matched.join(", ")})`);
   // Shown everywhere (not just Stage 3) so it can be eyeballed over time
   // without yet affecting scoring anywhere — see ageDistanceDays.
   meta.push(ageLabel(r, scene));
@@ -942,7 +942,7 @@ function renderResults(panel, results, state, opts = {}) {
 
   const filtered = results.filter((r) => scoreRelease(r, scene) >= MIN_SCORE);
   if (!filtered.length) {
-    const criteriaList = CRITERIA.map((c) => c.label).join(", ");
+    const criteriaList = applicableCriteria(scene).map((c) => c.label).join(", ");
     body.appendChild(messageDiv("sdp-empty", `Found ${results.length} release(s), but none matched at least ${MIN_SCORE} of the scene's known details (${criteriaList}).`));
     return { total: results.length, filtered: 0 };
   }

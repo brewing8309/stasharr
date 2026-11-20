@@ -133,13 +133,18 @@ function matchesTitle(hay, scene) {
   return words.length > 0 && words.filter((w) => hay.includes(w)).length / words.length >= TITLE_MIN_OVERLAP;
 }
 
-// The 5 fixed criteria a release is judged against. "Performer" matches if
-// ANY female performer (or one of her names) shows up, so the denominator
-// stays a constant 5 regardless of cast size; how many of the cast a
-// release names only breaks ties (see sortResults).
+// The 5 criteria a release is judged against. "Performer" matches if ANY
+// female performer (or one of her names) shows up, so the cast size never
+// changes the denominator; how many of the cast a release names only breaks
+// ties (see sortResults). "Parent studio" only applies when the scene has
+// one that differs from its studio (see applicableCriteria).
 var CRITERIA = [
   { label: "Studio", test: (hay, scene) => hayHas(hay, scene.studio) },
-  { label: "Parent studio", test: (hay, scene) => scene.parentStudio !== scene.studio && hayHas(hay, scene.parentStudio) },
+  {
+    label: "Parent studio",
+    applies: (scene) => !!scene.parentStudio && scene.parentStudio !== scene.studio,
+    test: (hay, scene) => scene.parentStudio !== scene.studio && hayHas(hay, scene.parentStudio)
+  },
   { label: "Performer", test: (hay, scene) => countPerformers(hay, scene) > 0 },
   { label: "Title", test: matchesTitle },
   { label: "Date", test: matchesDate }
@@ -150,6 +155,12 @@ var CRITERIA = [
 // every scene of a prolific performer), and this is what filters it back
 // out.
 var MIN_SCORE = 2;
+
+// The CRITERIA that can match at all for this scene — the "x/N" denominator,
+// so a scene without a parent studio tops out at 4/4 instead of 4/5.
+function applicableCriteria(scene) {
+  return CRITERIA.filter((c) => !c.applies || c.applies(scene));
+}
 
 // Returns which of CRITERIA a release matches, e.g. ["Studio", "Performer",
 // "Date"] — used both for the "3/5 hits" line under each result and for the
@@ -335,7 +346,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     formatDateYYMMDD, cleanTitle, normalizeForMatch, foldText, hayHas, releaseHay, mergeResults,
     RES_ORDER, resolutionOf, performerNameSet, countPerformers, matchesDate,
-    titleWords, matchesTitle, CRITERIA, MIN_SCORE,
+    titleWords, matchesTitle, CRITERIA, applicableCriteria, MIN_SCORE,
     matchedCriteria, scoreRelease, ageDistanceDays, ageLabel, sortByAgeProximity,
     sortResults, GRABBED_MAX_AGE_MS, pruneGrabbed, FEMALE_GENDERS, SIDEBAR_PERFORMERS,
     SIDEBAR_SCENES, sidebarPerformers, stashSceneLabel, AUTO_SEARCH_HASH, stashMarkerPattern,

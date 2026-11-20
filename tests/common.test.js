@@ -211,3 +211,9 @@ test("radar: the shared custom field, read and dated in local time", () => {
   assert.equal(c.radarSince(null), null);
   assert.equal(c.localIsoDate(new Date(2026, 0, 5, 23, 30)), "2026-01-05");
 });
+
+test("applicableCriteria drops Parent studio when the scene has none", () => {
+  assert.equal(c.applicableCriteria(scene).length, 5);
+  assert.equal(c.applicableCriteria({ ...scene, parentStudio: "" }).length, 4);
+  assert.equal(c.applicableCriteria({ ...scene, parentStudio: scene.studio }).length, 4);
+});
