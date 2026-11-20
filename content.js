@@ -57,8 +57,9 @@ const SIDEBAR_SIDES = ["right", "left"];
 // cover some of it; below this viewport width they'd cover too much and
 // start collapsed to their header.
 const SIDEBAR_COLLAPSE_BELOW_PX = 1800;
-// Inline icons (static markup, never mixed with page or API data). Up here
-// for the same reason: the dock is built by that first syncButton().
+// Inline icons (static markup, never mixed with page or API data), turned
+// into elements by icon(). Up here for the same reason: the dock is built by
+// that first syncButton().
 const ICONS = {
   logo: `<svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#ff6b2c"/><g fill="#141517"><rect x="19.5" y="12" width="15" height="6" rx="2.5"/><rect x="12" y="19.5" width="6" height="8" rx="2.5"/><rect x="19.5" y="29" width="15" height="6" rx="2.5"/><rect x="36" y="36.5" width="6" height="8" rx="2.5"/><rect x="19.5" y="46" width="15" height="6" rx="2.5"/></g><circle cx="49" cy="49" r="3.5" fill="#fff"/></svg>`,
   search: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6"/></svg>`,
@@ -132,6 +133,19 @@ new MutationObserver(queueSync).observe(document.body, { childList: true, subtre
 window.addEventListener("popstate", queueSync);
 syncButton();
 
+function icon(name) {
+  const svg = ICONS[name].replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ');
+  return document.importNode(new DOMParser().parseFromString(svg, "image/svg+xml").documentElement, true);
+}
+
+// A <span> with text, for button labels next to an icon.
+function textSpan(text, className) {
+  const span = document.createElement("span");
+  if (className) span.className = className;
+  span.textContent = text;
+  return span;
+}
+
 // The dock in the bottom right corner: the Stash badge (once known) on top,
 // the search button and the Auto-Download switch below it.
 function injectButton(sceneId) {
@@ -169,7 +183,7 @@ function autoToggle() {
 
 function resetSearchButton() {
   const btn = document.getElementById("sdp-button");
-  if (btn) btn.innerHTML = `${ICONS.search}<span>Search Prowlarr</span>`;
+  if (btn) btn.replaceChildren(icon("search"), textSpan("Search Prowlarr"));
 }
 
 // While a search runs, the button shows how many of its queries are back.
@@ -340,8 +354,8 @@ function showStashBadge(scene) {
   link.target = "_blank";
   link.rel = "noopener noreferrer";
   link.title = `Already in Stash — ${scene.resolution}. Opens it in Stash.`;
-  link.innerHTML = `<span class="sdp-dot"></span><span class="sdp-badge-text">Already in your Stash</span><span class="sdp-badge-res"></span>${ICONS.open}`;
-  link.querySelector(".sdp-badge-res").textContent = scene.resolution;
+  link.append(textSpan("", "sdp-dot"), textSpan("Already in your Stash", "sdp-badge-text"),
+    textSpan(scene.resolution, "sdp-badge-res"), icon("open"));
   badge.appendChild(link);
   dock.prepend(badge);
   placePanel();
@@ -435,7 +449,7 @@ function renderSidebar(performer, side) {
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "sdp-sidebar-toggle";
-  toggle.innerHTML = ICONS.chevron;
+  toggle.appendChild(icon("chevron"));
   toggle.addEventListener("click", () => {
     delete bar.dataset.sdpPanelCollapsed;
     setSidebarCollapsed(bar, !bar.classList.contains("sdp-collapsed"));
@@ -473,10 +487,7 @@ function renderSidebar(performer, side) {
   const rest = performer.count - performer.scenes.length;
   if (rest > 0) {
     const more = newTabLink("sdp-sidebar-more", performer.url);
-    const text = document.createElement("span");
-    text.textContent = `${rest} more in Stash`;
-    more.appendChild(text);
-    more.insertAdjacentHTML("beforeend", ICONS.arrow);
+    more.append(textSpan(`${rest} more in Stash`), icon("arrow"));
     body.appendChild(more);
   }
 
@@ -507,7 +518,7 @@ function radarButton(performer) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "sdp-sidebar-radar";
-  button.innerHTML = `${ICONS.radar}<span></span>`;
+  button.append(icon("radar"), textSpan(""));
   let since = performer.radar;
   const show = (error) => {
     button.lastChild.textContent = error ? "Failed" : since ? "On radar" : "Radar";
@@ -803,23 +814,16 @@ function ensurePanel() {
   panel.id = "sdp-panel";
   panel.innerHTML = `
     <div class="sdp-panel-head">
-      ${ICONS.logo}
       <div class="sdp-head-text">
         <span class="sdp-title">Releases</span>
         <span class="sdp-subtitle"></span>
       </div>
       <span class="sdp-head-actions">
-        <button type="button" class="sdp-refresh" title="Search again" aria-label="Search again">${ICONS.refresh}</button>
-        <button type="button" class="sdp-close" title="Close" aria-label="Close">${ICONS.close}</button>
+        <button type="button" class="sdp-refresh" title="Search again" aria-label="Search again"></button>
+        <button type="button" class="sdp-close" title="Close" aria-label="Close"></button>
       </span>
     </div>
-    <div class="sdp-steps">${STEP_LABELS.map((label, i) => `
-      <div class="sdp-step${i === 0 ? " sdp-current" : ""}">
-        <span class="sdp-step-bar"></span>
-        <span class="sdp-step-num">Pass ${i + 1}</span>
-        <span class="sdp-step-label">${label}</span>
-      </div>`).join("")}
-    </div>
+    <div class="sdp-steps"></div>
     <details class="sdp-details">
       <summary><span class="sdp-details-sum">Reading scene…</span><span class="sdp-details-tag">Details</span></summary>
       <div class="sdp-details-body"></div>
@@ -828,6 +832,16 @@ function ensurePanel() {
     <div class="sdp-panel-foot">
       <button type="button" class="sdp-try-harder" hidden></button>
     </div>`;
+  panel.querySelector(".sdp-panel-head").prepend(icon("logo"));
+  panel.querySelector(".sdp-refresh").appendChild(icon("refresh"));
+  panel.querySelector(".sdp-close").appendChild(icon("close"));
+  const steps = panel.querySelector(".sdp-steps");
+  STEP_LABELS.forEach((label, i) => {
+    const step = document.createElement("div");
+    step.className = `sdp-step${i === 0 ? " sdp-current" : ""}`;
+    step.append(textSpan("", "sdp-step-bar"), textSpan(`Pass ${i + 1}`, "sdp-step-num"), textSpan(label, "sdp-step-label"));
+    steps.appendChild(step);
+  });
   panel.querySelector(".sdp-close").addEventListener("click", closePanel);
   panel.querySelector(".sdp-refresh").addEventListener("click", () => onSearchClick({ fresh: true }));
   panel.querySelector(".sdp-try-harder").addEventListener("click", onTryHarderClick);
@@ -1118,10 +1132,10 @@ function stageLabel(state) {
 function setDownloadButton(btn, state) {
   btn.classList.toggle("sdp-done", state === "sent");
   btn.classList.toggle("sdp-error", state === "failed");
-  if (state === "sent") btn.innerHTML = `${ICONS.check}<span>Sent</span>`;
-  else if (state === "sending") btn.innerHTML = `<span>Sending…</span>`;
-  else if (state === "failed") btn.innerHTML = `<span>Failed</span>`;
-  else btn.innerHTML = `${ICONS.download}<span>Download</span>`;
+  if (state === "sent") btn.replaceChildren(icon("check"), textSpan("Sent"));
+  else if (state === "sending") btn.replaceChildren(textSpan("Sending…"));
+  else if (state === "failed") btn.replaceChildren(textSpan("Failed"));
+  else btn.replaceChildren(icon("download"), textSpan("Download"));
 }
 
 // Renders the result list into `panel` and returns { total, filtered }
