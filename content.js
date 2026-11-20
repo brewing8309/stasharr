@@ -169,7 +169,8 @@ function injectButton(sceneId) {
 }
 
 // The Auto-Download switch next to the search button. Stored in
-// storage.local, so it stays as set across scenes, tabs and restarts.
+// storage.local, so it stays as set across scenes, tabs and restarts, and
+// follows changes made in other tabs.
 function autoToggle() {
   const wrap = document.createElement("label");
   wrap.id = "sdp-auto";
@@ -178,6 +179,10 @@ function autoToggle() {
   const input = wrap.querySelector("input");
   browser.storage.local.get({ autoDownload: false }).then(({ autoDownload }) => { input.checked = autoDownload; });
   input.addEventListener("change", () => browser.storage.local.set({ autoDownload: input.checked }));
+  // Other open StashDB tabs follow when the switch is flipped in one of them.
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.autoDownload) input.checked = !!changes.autoDownload.newValue;
+  });
   return wrap;
 }
 
