@@ -73,6 +73,7 @@ Press **Download** on the release you want. Prowlarr passes it to your download 
 | [How it works](docs/how-it-works.md) | Architecture, the three search stages, scoring |
 | [Troubleshooting & FAQ](docs/troubleshooting.md) | Symptoms and causes, privacy, permissions |
 | [Development & releasing](docs/development.md) | Layout, tests, release flow |
+| [Security audit](SECURITY-AUDIT.md) | Scope, method and results of the security review |
 
 ## 🧑‍🍳 Good to know
 - **Your data stays with you.** Keys live in `browser.storage.local` and are only sent to the Prowlarr and Stash URLs you typed. The manifest declares `data_collection_permissions: none`.

@@ -9,3 +9,4 @@
 | [How it works](how-it-works.md) | Architecture, the three search stages, scoring |
 | [Troubleshooting & FAQ](troubleshooting.md) | Symptoms and causes, privacy, permissions, updates |
 | [Development & releasing](development.md) | Project layout, tests, release flow |
+| [Security audit](../SECURITY-AUDIT.md) | Scope, method and results of the security review |
