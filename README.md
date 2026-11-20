@@ -1,382 +1,88 @@
-<div align="center">
+<img src="docs/assets/banner.png" alt="stasharr: from a StashDB scene to the release. One click." width="100%">
 
-<img src="docs/assets/banner.png" alt="stasharr — from a StashDB scene to the release. One click." width="100%">
-
-**Find the release for a StashDB scene without ever leaving the page.**
-
-A Firefox extension that turns any [StashDB](https://stashdb.org) scene page into a one-click
-Prowlarr search — resolving the scene's studio, cast and date, hunting your indexers in three
-escalating passes, scoring what comes back, and sending your pick straight to your download client.
-
-![Firefox](https://img.shields.io/badge/Firefox-WebExtension-FF7139?logo=firefoxbrowser&logoColor=white)
-![Manifest](https://img.shields.io/badge/Manifest-v2-blue)
-![Dependencies](https://img.shields.io/badge/dependencies-none-success)
-![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)
-![Vibecoded](https://img.shields.io/badge/100%25-vibecoded-ff69b4)
-
-<p>
-<a href="#quick-start">Quick start</a> · <a href="#what-it-does">Features</a> · <a href="#how-it-works">How it works</a> · <a href="#configuration">Configuration</a> · <a href="#faq">FAQ</a> · <a href="CHANGELOG.md">Changelog</a>
+<p align="center">
+  <a href="https://github.com/brewing8309/stasharr/releases/latest"><img alt="Version 1.8.0" src="https://img.shields.io/badge/version-1.8.0-FF6B2C?style=flat-square&labelColor=17181B"></a>
+  <img alt="Firefox" src="https://img.shields.io/badge/Firefox-Manifest%20v2-FF6B2C?style=flat-square&labelColor=17181B">
+  <img alt="No dependencies" src="https://img.shields.io/badge/dependencies-none-C6F03A?style=flat-square&labelColor=17181B">
+  <a href="LICENSE"><img alt="License PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20NC%201.0.0-C6F03A?style=flat-square&labelColor=17181B"></a>
 </p>
 
-</div>
+<p align="center">
+  <b><a href="#-quick-start">Quick start</a></b> ·
+  <b><a href="docs/README.md">Documentation</a></b> ·
+  <b><a href="docs/troubleshooting.md">Troubleshooting</a></b> ·
+  <b><a href="CHANGELOG.md">Changelog</a></b>
+</p>
 
 ---
 
-> ### Heads up: this is 100% vibecoded
->
-> **This software is vibecoded.** It was written end to end by an AI (Claude) from
-> natural-language prompts. No human wrote or reviewed the code by hand. It ships with automated
-> tests but no warranty.
->
-> It works, it's commented, and it's been thought through — but it has never seen a human code
-> review. Read it before you run it. That's the deal.
->
-> *(This notice is a licensing requirement, not just a disclaimer — see [License](#license).)*
+**stasharr** turns any [StashDB](https://stashdb.org) scene page into a one-click [Prowlarr](https://prowlarr.com) search. It reads the scene's studio, cast and date, hunts your indexers in three escalating passes, scores what comes back and sends your pick straight to your download client.
 
----
+It runs entirely inside Firefox: no server, no telemetry, just your browser talking to your own Prowlarr, your own Stash and StashDB.
 
-## Quick start
+> [!NOTE]
+> **100 % vibe-coded.** Every line of stasharr (code, tests, design and these docs) was written by an AI (Claude) from natural-language prompts. No human wrote or reviewed the code by hand. It ships with automated tests but no warranty. Read the code before you run it. *(This notice is a licensing requirement, see [License](#-license).)*
 
-<img src="docs/assets/steps.png" alt="Install, connect, search, grab" width="100%">
-
-**You need:** Firefox, a running [Prowlarr](https://prowlarr.com) with at least one indexer, and a
-[StashDB](https://stashdb.org) account. [StashApp](https://stashapp.cc) is optional — it adds the
-"already in your library" badges and sidebars.
-
-1. **Install.** Download `stasharr-<version>.xpi` from [Releases](https://github.com/brewing8309/stasharr/releases/latest)
-   and drag it into a Firefox window. Confirm the prompt.
-2. **Connect Prowlarr.** `about:addons` → stasharr → **Preferences**. Enter the **Prowlarr URL**
-   (e.g. `http://192.168.1.10:9696`, no trailing slash) and the **API key** from
-   Prowlarr → Settings → General → Security. Press **Test Prowlarr** — it should turn green.
-3. **Optional: connect Stash.** Enter your **Stash URL** (and API key if Stash asks for one), press
-   **Test Stash**, then **Save**.
-4. **Log in to StashDB** in the same Firefox. stasharr reads the scene through your own session.
-5. **Search.** Open any scene (`stashdb.org/scenes/<id>`), press **Search Prowlarr** in the dock
-   in the bottom right corner. Releases with the most hits come first.
-6. **Download.** Press **Download** on the release you want. Prowlarr passes it to your download
-   client. The button turns into **Sent**.
-
-> **Tip:** the dock's **Auto-Download** switch sends the best release (every hit matched)
-> automatically after a search. Leave it off until you trust your indexers.
-
-## What it does
-
-You're on a StashDB scene page. You want the file. Normally that means copy-pasting the studio,
-the performers and the date into Prowlarr, guessing at naming conventions, and trying again with
-different terms when nothing hits.
-
-This does that for you, and then some:
+## 🔎 What you get
 
 | | |
 |---|---|
-| **One-click search** | A **Search Prowlarr** button in a small dock in the bottom right corner of every `stashdb.org/scenes/<id>` page, with the Auto-Download switch next to it. |
-| **Three escalating passes** | Starts narrow and precise, widens on demand — 5 parallel queries, then 3 more, then a last-ditch performer-only sweep. |
-| **Scored results** | Every release is checked against 5 known facts about the scene and ranked, so a prolific performer's entire back catalogue doesn't drown the one file you want. |
-| **Grouped by quality** | 2160p → 1080p → 720p → everything else, with seeders/size/indexer on every row. |
-| **One-click grab** | **Download** hands the release to Prowlarr, which passes it to your download client. |
-| **"Already have it"** | If you run StashApp, scenes already in your library get a badge with their resolution and a link — before you search anything. |
-| **Owned badge in every list** | Scene cards on performer, studio, tag and search pages carry a lime **1080p** badge (or whatever you have) when that scene is already in your Stash — one request per page, and a click on it opens the scene in Stash. Needs Stash 0.31 or newer. |
-| **Her other scenes** | With StashApp set up, the scene's first two performers each get a sidebar — right edge, then left — with up to 4 of their other scenes in your library, thumbnails included, and a link to the performer in Stash when there are more. |
-| **Download from Stashboard** | With [Stashboard](https://github.com/brewing8309/stashboard) on your Stash front page, its StashDB tiles get a **⬇ Download** button: it opens the scene on StashDB and starts the search right away. |
-| **Radar** | The **Radar** button in each performer sidebar puts them on Stashboard's radar: more of them on your Stash front page, short of a favourite. |
-| **Reverse lookup** | Select *any* text anywhere in the browser → right-click → **Search StashDB** to find the scene that text belongs to. |
-| **Full transparency** | A **Details** pane shows every query fired, live, with each one's own raw unfiltered results. No black box. |
+| ⚡ **One-click search** | **Search Prowlarr** in a dock at the bottom right of every scene page. |
+| 🪜 **Three escalating passes** | Narrow and precise first, wider on demand. Results only ever grow. |
+| 🎯 **Scored results** | Every release is checked against 5 facts about the scene (studio, parent studio, performer, title, date) and ranked. |
+| 🧱 **Grouped by quality** | 2160p, 1080p, 720p, rest, with seeders, size and indexer on every row. |
+| ⬇️ **One-click grab** | **Download** hands the release to Prowlarr. It turns into **Sent** so you never grab it twice. |
+| 🟢 **Already in your Stash** | Badges on scene pages and scene cards, with the resolution you own. |
+| 👥 **Performer sidebars** | Their other scenes in your library, right next to the scene. |
+| 🔁 **Stashboard** | Download buttons and Radar for [Stashboard](https://github.com/brewing8309/stashboard) users. |
+| 🕵️ **Reverse lookup** | Select any text, right-click, **Search StashDB** to find which scene it is. |
+| 🔍 **Full transparency** | A **Details** pane lists every query and its raw results. No black box. |
 
 <img src="docs/assets/result.png" alt="The results panel: scored releases grouped by resolution" width="100%">
 
-## How it works
+## 🚀 Quick start
 
-Everything runs locally in your browser. There is no server, no telemetry, no third party — just
-your Firefox talking to your Prowlarr, your Stash, and StashDB.
+**You need:** Firefox, a running Prowlarr with at least one indexer and a StashDB account. [StashApp](https://stashapp.cc) is optional.
 
-```
-              ┌──────────────────────── Firefox ────────────────────────┐
-              │                                                          │
- stashdb.org  │  content.js ──── GraphQL (your session) ──► StashDB      │
- scene page   │      │           studio · cast · aliases · parent · date │
-              │      │                                                   │
-              │      ▼                                                   │
-              │  3-stage search ──► background.js ──────────► Prowlarr   │
-              │      ▲                (all cross-origin        (search   │
-              │      │                 requests proxied         + grab)  │
-              │  results panel          through here)                    │
-              │  scored · grouped · deduped ◄─────────────────► StashApp │
-              │                                                (library  │
- any page ────┤  right-click selection ──► background.js ──► StashDB      │
- (reverse)    │              picker.js ◄── matching scenes     search)   │
-              │                                                          │
-              └──────────────────────────────────────────────────────────┘
-```
+### 1. Install
+Download `stasharr-<version>.xpi` from [Releases](https://github.com/brewing8309/stasharr/releases/latest) and drag it into a Firefox window. Confirm the prompt. From then on it updates itself.
 
-### The three stages
+### 2. Connect Prowlarr
+`about:addons` → stasharr → **Preferences**. Enter the **Prowlarr URL** (e.g. `http://192.168.1.10:9696`, no trailing slash) and the **API key** from Prowlarr → Settings → General → Security. Press **Test Prowlarr**.
 
-<img src="docs/assets/stages.png" alt="Three escalating search passes" width="100%">
+### 3. Connect Stash *(optional)*
+Enter your **Stash URL** (and API key if Stash asks for one), press **Test Stash**, then **Save**. This switches on the badges and sidebars.
 
-Each stage fires its queries **in parallel**, merges the responses, de-duplicates them by release
-GUID, and merges them into everything found so far. Results never get thrown away when you move
-up a stage — the list only ever grows.
+### 4. Search
+Log in to StashDB in the same Firefox, open a scene (`stashdb.org/scenes/<id>`) and press **Search Prowlarr** in the dock. Nothing good? **Try harder**, then **Last chance**.
 
-<table>
-<tr><th>Stage</th><th>Trigger</th><th>Queries</th><th>Filtering</th></tr>
-<tr>
-<td><b>1 — Automatic</b></td>
-<td>Clicking the button</td>
-<td>
+### 5. Download
+Press **Download** on the release you want. Prowlarr passes it to your download client.
 
-`performers + studio + date`<br>
-`performers + date`<br>
-`performers + studio`<br>
-`studio + date`<br>
-`title`
+> [!TIP]
+> The dock's **Auto-Download** switch sends the best release (every hit matched) automatically after a search. Leave it off until you trust your indexers.
 
-</td>
-<td>Must match ≥ 2 of 5 criteria</td>
-</tr>
-<tr>
-<td><b>2 — Try harder</b></td>
-<td>Click 1</td>
-<td>
+## 📚 Documentation
 
-`performers + parent studio + date`<br>
-`performers + parent studio`<br>
-`performer aliases + date`
-
-</td>
-<td>Same ≥ 2 of 5 filter</td>
-</tr>
-<tr>
-<td><b>3 — Last chance</b></td>
-<td>Click 2</td>
-<td>
-
-`performers` (nothing else)
-
-</td>
-<td>No filter. Sorted by publish-date proximity, capped at 50.</td>
-</tr>
-</table>
-
-Queries that would repeat something already tried — or that have nothing to fill in, like a studio
-with no parent brand — are skipped rather than re-sent. After stage 3 there is nothing left to
-fall back to, so the button retires itself and leaves a parting word in its place.
-
-### Scoring
-
-Every release title is normalised (lowercased, punctuation stripped) and checked against five
-fixed facts about the scene:
-
-**Studio** · **Parent studio** · **Performer** · **Title** · **Date**
-
-- **Performer** matches on any cast member's name, the name she's credited as in this scene, or
-  any of her aliases. Short single-word aliases are skipped for scoring, because something like
-  "Mia" would match half the index.
-- **Title** matches on the whole title, or on at least 60 % of its significant words. Release
-  names often cut long titles short.
-
-Stages 1 and 2 only show releases matching **at least 2 of 5** — that's what keeps the broad
-queries usable. Every row shows its own score inline (`3/5 hits (Studio, Performer 2/3, Date)`),
-so you can see exactly why something is in the list. With more than one performer, the
-`2/3` tells you how much of the cast the release names. Within a resolution group, higher
-scores rank first, then releases naming more of the cast, then seeders/grabs.
-
-Every row also shows how far its Prowlarr publish date sits from the scene's release date
-(`4d from scene date`). That's **informational only** — it never feeds the score or the sort,
-except in stage 3, where it *is* the sort.
-
-### Download from Stashboard
-
-[Stashboard](https://github.com/brewing8309/stashboard), a front page dashboard for Stash, shows
-StashDB rows — trending, new from your favourites — next to your library. With stasharr installed
-and your Stash URL set, every StashDB tile you don't have yet gets **⬇ Download**: it opens the
-scene on StashDB with the panel already open and Stage 1 running. You still pick the release.
-
-How they find each other: stasharr marks your Stash page (only the exact Stash URL from the
-options) so Stashboard knows to show the button, and any link to a StashDB scene ending in
-`#stasharr-search` opens with the search started. That link only ever starts a search; sending
-a release to Prowlarr always takes your click.
-
-### Stashboard's radar
-
-The performer sidebars have a **Radar** button in their header: it puts the performer on
-[Stashboard](https://github.com/brewing8309/stashboard)'s radar — not a favourite, but a
-**More from …** row for them on your Stash front page, with their unwatched scenes and the StashDB
-ones you're missing. Click again to take them off. It writes one thing, the performer's `radar`
-custom field in Stash (the day you set it), the same field Stashboard's own 📡 uses. A performer
-gets a sidebar for this even with no other scenes in your Stash yet; favourites don't get the button.
-
-### Reverse lookup
-
-Found a filename in a forum post, a release tracker, or a chat log and want to know which scene it
-actually is? Select it, right-click, **Search StashDB for "…"**.
-
-The selection gets normalised into a plain search phrase — file extensions, quality and codec tags
-(`1080p`, `x264`, `WEB-DL`, …) and separators (dots, underscores, brackets, hyphens) all stripped —
-without assuming which format it is. All of these work:
-
-```
-Studio.Performer.Name.26.09.10.XXX.1080p.mp4   →   Studio Performer Name 26 09 10
-[Studio] Performer - Scene Title               →   Studio Performer Scene Title
-Performer - Scene Title                        →   Performer Scene Title
-just a half-remembered title                   →   just a half remembered title
-```
-
-A floating panel then shows the matching StashDB scenes with their thumbnails, studio, date and
-cast. Click one to open it on StashDB — where the normal search button takes over. This step only
-finds and confirms the scene; it never touches Prowlarr on its own.
-
-## Install
-
-Grab the signed `stasharr-<version>.xpi` from [Releases](https://github.com/brewing8309/stasharr/releases)
-and drag it into Firefox. That's it — from 1.3.0 on it **updates itself**: Firefox periodically
-checks [`updates.json`](updates.json) in this repo and pulls newer releases like any other
-add-on. To check right away: `about:addons` → gear icon → **Check for Updates**.
-
-<details>
-<summary><b>Temporary — for trying out a branch</b> (gone on restart)</summary>
-
-1. Clone or download this repo.
-2. Open `about:debugging#/runtime/this-firefox`.
-3. **Load Temporary Add-on…** → pick `manifest.json`.
-
-</details>
-
-<details>
-<summary><b>Signing your own build</b> (for forks)</summary>
-
-Firefox refuses to permanently install unsigned extensions on Release and Beta. An add-on ID can
-only ever be signed by the AMO account that owns it, so a fork first needs its own `gecko.id` in
-`manifest.json` — and its own `update_url`, or it'll keep polling this repo. Then sign it as an
-unlisted add-on, which never goes on the public store or through Mozilla's review:
-
-```bash
-npm install --global web-ext
-web-ext sign --channel=unlisted \
-  --api-key="$AMO_JWT_ISSUER" \
-  --api-secret="$AMO_JWT_SECRET"
-```
-
-Get the credentials at [addons.mozilla.org → Developer Hub → API Keys](https://addons.mozilla.org/developers/addon/api/key/).
-The signed `.xpi` lands in `web-ext-artifacts/`.
-
-</details>
-
-> Firefox Developer Edition, Nightly and ESR can skip signing entirely by setting
-> `xpinstall.signatures.required` to `false` in `about:config`.
-
-## Configuration
-
-Open the add-on's preferences (`about:addons` → stasharr → Preferences) and fill in:
-
-| Setting | Default | Required | What it's for |
-|---|---|---|---|
-| **Prowlarr URL** | — | yes | Base URL, no trailing slash. e.g. `http://localhost:9696` |
-| **Prowlarr API key** | — | yes | Prowlarr → Settings → General → Security |
-| **Search categories** | `6000` | no | Newznab/Torznab category IDs, comma-separated. `6000` = XXX. Empty = all. |
-| **Result limit** | `200` | no | Max releases Prowlarr returns per query. Raise it if stage 3 seems to be missing hits for a prolific performer. |
-| **Request timeout** | `25` | no | Seconds to wait for Prowlarr, Stash or StashDB before giving up. Raise it if slow indexers keep timing out. |
-| **Stash URL** | — | no | Your own StashApp, e.g. `http://localhost:9999`. Enables the "already in your library" badge, the performer sidebars, the owned badge on scene cards and Stashboard's download buttons. |
-| **Stash API key** | — | no | Only if your Stash requires one. |
-
-**Test Prowlarr** and **Test Stash** verify each connection before you save.
-
-A couple of knobs are deliberately not in the UI, but are one-line edits if you want them:
-`MIN_SCORE` in `common.js` (the 2-of-5 threshold) and `LAST_CHANCE_LIMIT` in `content.js` (the
-50-result cap on stage 3).
-
-## Usage
-
-1. Open a scene on `stashdb.org`. If it's already in your Stash library, the badge tells you now,
-   and the sidebars show what else you have of its performers. On narrower windows they start
-   folded to their header; **+** opens one.
-2. Hit **Search Prowlarr** (bottom right).
-3. Pick a release, hit **Download**. It turns into **Sent** and stays that way — across
-   stages, new searches, other tabs and reloads, for 90 days — so you can't accidentally grab the
-   same thing twice.
-4. Nothing good? **Try harder**, then **Last chance**.
-5. Curious what it actually searched for? Expand **Details** — every query, every raw result.
-6. Come back to a scene within 30 minutes and the panel picks up where you left off, without
-   querying your indexers again. **↻** in the panel header searches fresh.
-
-## Troubleshooting
-
-| Symptom | Cause |
+| | |
 |---|---|
-| Panel says "Could not read scene" | Not logged into StashDB. It falls back to scraping the rendered page, which has no aliases or parent studio — log in for the good data. |
-| Every query fails instantly | Prowlarr URL or API key wrong. Hit **Test Prowlarr** in preferences. |
-| Search hangs, then errors | Requests time out after 25s by default. Usually a dead indexer in Prowlarr, or an unreachable instance — raise **Request timeout** if your indexers are just slow. |
-| Results look stale | Reopening a scene within 30 minutes restores the last search instead of re-querying. Hit **↻** in the panel header. |
-| Some queries fail, others don't | You'll get a warning banner above the results; expand **Details** to see which indexer choked. Partial results still show. |
-| Stage 3 feels like it's missing things | Raise **Result limit**. Prowlarr caps at 200 by default, and a prolific performer blows through that easily. |
-| No "already in Stash" badge | Stash URL not set, or the scene was never scraped from StashDB (matching is done on the stash-box ID StashApp records). |
-| No owned badge on scene cards | Stash URL not set, Stash older than 0.31 (it lacks the `stash_ids_endpoint` filter — the console says so), or the scenes were never matched to StashDB in Stash. |
-| No performer sidebars | Stash URL not set, the performer isn't linked to StashDB in Stash (matching is done on her StashDB ID, never by name), or you have no other scene of hers. Male performers don't get one. |
-| Right-click search does nothing | Restricted page (`about:`, `addons.mozilla.org`) — Firefox forbids injection there. Also needs a StashDB login. |
+| [Installation & updates](docs/installation.md) | Signed `.xpi`, trying a branch, signing your own fork |
+| [Configuration](docs/configuration.md) | Every setting in the preferences |
+| [Usage](docs/usage.md) | A scene from search to download |
+| [Features](docs/features.md) | Badges, sidebars, Auto-Download, Stashboard, radar, reverse lookup |
+| [How it works](docs/how-it-works.md) | Architecture, the three search stages, scoring |
+| [Troubleshooting & FAQ](docs/troubleshooting.md) | Symptoms and causes, privacy, permissions |
+| [Development & releasing](docs/development.md) | Layout, tests, release flow |
 
-## FAQ
+## 🧑‍🍳 Good to know
+- **Your data stays with you.** Keys live in `browser.storage.local` and are only sent to the Prowlarr and Stash URLs you typed. The manifest declares `data_collection_permissions: none`.
+- **Desktop Firefox only.** It is a Manifest v2 extension; Chrome, Edge and Android are not supported.
+- **It never downloads by itself.** It asks Prowlarr to grab a release; Prowlarr hands it to the client you set up there.
 
-**Is it safe to give it my Prowlarr key?** The key stays in `browser.storage.local` on your machine
-and is only sent to the Prowlarr URL you typed. There is no stasharr server and no telemetry; the
-manifest declares `data_collection_permissions: none`.
+## 🤝 Contributing
+Bug reports and ideas are welcome as [issues](https://github.com/brewing8309/stasharr/issues). Run the tests with `node --test` (Node 20+, nothing to install). Details in [Development](docs/development.md).
 
-**Why `<all_urls>`?** Your Prowlarr and Stash live on addresses only you know (LAN IPs, your own
-domains), so Firefox can only be told to allow cross-origin requests broadly. The code only ever
-contacts stashdb.org, your Prowlarr and your Stash — read `background.js` to verify.
-
-**Does it work on Chrome, Edge or Android?** No. It's a Firefox Manifest v2 extension; desktop
-Firefox only.
-
-**Does it download anything itself?** No. It asks Prowlarr to grab a release. Prowlarr hands it to
-whatever download client you set up there.
-
-**A release I own shows no badge.** Matching uses the StashDB ID that Stash stores when a scene
-was identified. Scenes never matched to StashDB in Stash can't be recognised. See
-[Troubleshooting](#troubleshooting).
-
-**How do updates work?** The signed add-on checks [`updates.json`](updates.json) in this repo
-(about:addons → gear → *Check for Updates*). Nothing is installed without Firefox's normal
-update flow.
-
-## Under the hood
-
-No build step, no bundler, no dependencies. Clone it and it runs.
-
-```
-manifest.json    MV2, <all_urls> + storage + contextMenus
-common.js        pure text/matching/scoring helpers, loaded ahead of both scripts below
-background.js    every cross-origin request (Prowlarr, StashApp, StashDB search),
-                 configurable timeouts, context-menu registration
-content.js       injected on stashdb.org — scene resolution, query building,
-                 the 3-stage state machine, results panel, performer sidebars,
-                 owned badges on scene cards
-picker.js        injected on demand into any page for the reverse lookup panel
-content.css      the look of everything injected: dock, panels, sidebars, badges
-fonts/           Archivo + IBM Plex Mono (SIL OFL 1.1), bundled — no font CDN requests
-options.html/js  preferences
-tests/           node:test suite — run with `node --test` (Node 20+, nothing to install)
-```
-
-Content scripts can't reach cross-origin hosts, so everything network-facing lives in
-`background.js` and is reached by message passing. Credentials never leave `browser.storage.local`
-and are only ever sent to the hosts you configured yourself.
-
-### Releasing
-
-1. Bump `version` in `manifest.json`, add a `CHANGELOG.md` entry, and add an entry to
-   `updates.json` pointing at `releases/download/v<version>/stasharr-<version>.xpi`.
-   `node --test` fails until all three agree.
-2. Push a tag `v<version>` on that commit. The [Release](.github/workflows/release.yml)
-   workflow runs the tests, has Mozilla sign the build as an unlisted add-on and publishes a
-   GitHub release with `stasharr-<version>.xpi` attached and the CHANGELOG entry as notes.
-   It needs the repo secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` from
-   [AMO → API Keys](https://addons.mozilla.org/developers/addon/api/key/).
-3. Merge to `main` once the release is up. Installs read `updates.json` from `main`, so
-   publishing the release *first* means they never go looking for a file that isn't there yet.
-
-Mozilla signs each version number only once, so re-running a release that already got signed
-fails. If a run breaks after signing, take the signed `.xpi` from the run's artifacts and attach
-it to the release by hand. A release you pull after publishing needs a new version.
-
-## License
+## 📜 License
 
 [**PolyForm Noncommercial License 1.0.0**](LICENSE) — source available, not open source.
 
@@ -395,7 +101,7 @@ Required Notice: Copyright 2026 brewing8309 — https://github.com/brewing8309/s
 Required Notice: This software is vibecoded. It was written end to end by an AI (Claude) from natural-language prompts. No human wrote or reviewed the code by hand. It ships with automated tests but no warranty.
 ```
 
-## Disclaimer
+## ⚖️ Disclaimer
 
 This tool searches **your own** Prowlarr instance across **your own** indexers, and talks to
 **your own** Stash. It hosts nothing, indexes nothing, distributes nothing, and ships with no
