@@ -29,7 +29,7 @@ It runs entirely inside Firefox: no server, no telemetry, just your browser talk
 |---|---|
 | ⚡ **One-click search** | **Search Prowlarr** in a dock at the bottom right of every scene page. |
 | 🪜 **Three escalating passes** | Narrow and precise first, wider on demand. Results only ever grow. |
-| 🎯 **Scored results** | Every release is checked against 5 facts about the scene (studio, parent studio, performer, title, date) and ranked. |
+| 🎯 **Scored results** | Every release is checked against 4 facts about the scene (studio, performer, title, date) and ranked. |
 | 🧱 **Grouped by quality** | 2160p, 1080p, 720p, rest, with seeders, size and indexer on every row. |
 | ⬇️ **One-click grab** | **Download** hands the release to Prowlarr. It turns into **Sent** so you never grab it twice. |
 | 🟢 **Already in your Stash** | Badges on scene pages and scene cards, with the resolution you own. |

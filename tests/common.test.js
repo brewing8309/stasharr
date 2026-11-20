@@ -92,10 +92,9 @@ test("matchedCriteria reports each matching criterion", () => {
   assert.deepEqual(c.matchedCriteria(release("Unrelated.Release.1080p"), scene), []);
 });
 
-test("parent studio only counts when it differs from the studio", () => {
-  const same = { ...scene, parentStudio: scene.studio };
-  assert.ok(!c.matchedCriteria(release("AcmeStudio.Something"), same).includes("Parent studio"));
-  assert.ok(c.matchedCriteria(release("AcmeGroup.Something"), scene).includes("Parent studio"));
+test("the parent studio counts as a Studio hit, never as a hit of its own", () => {
+  assert.deepEqual(c.matchedCriteria(release("AcmeGroup.Something"), scene), ["Studio"]);
+  assert.deepEqual(c.matchedCriteria(release("AcmeStudio.AcmeGroup.Something"), scene), ["Studio"]);
 });
 
 test("performerNameSet keeps primary and credited names, and only distinctive aliases", () => {
@@ -212,10 +211,9 @@ test("radar: the shared custom field, read and dated in local time", () => {
   assert.equal(c.localIsoDate(new Date(2026, 0, 5, 23, 30)), "2026-01-05");
 });
 
-test("applicableCriteria drops Parent studio when the scene has none", () => {
-  assert.equal(c.applicableCriteria(scene).length, 5);
+test("the hits denominator is 4 with or without a parent studio", () => {
+  assert.equal(c.applicableCriteria(scene).length, 4);
   assert.equal(c.applicableCriteria({ ...scene, parentStudio: "" }).length, 4);
-  assert.equal(c.applicableCriteria({ ...scene, parentStudio: scene.studio }).length, 4);
 });
 
 test("autoPickRelease takes the top-ranked release with every applicable hit", () => {
@@ -224,7 +222,7 @@ test("autoPickRelease takes the top-ranked release with every applicable hit", (
   const full1080 = release("AcmeStudio.26.09.10.Jane.Doe.Weekend.Getaway.1080p");
   const partial2160 = release("AcmeStudio.26.09.10.Jane.Doe.2160p");
   assert.equal(c.autoPickRelease([full720, partial2160, full1080], noParent), full1080);
-  // With a parent studio, 4 of 5 isn't a full match.
-  assert.equal(c.autoPickRelease([full720, full1080], scene), null);
+  // A parent studio doesn't raise the bar.
+  assert.equal(c.autoPickRelease([full720, full1080], scene), full1080);
   assert.equal(c.autoPickRelease([], noParent), null);
 });

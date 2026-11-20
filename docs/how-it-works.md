@@ -45,7 +45,7 @@ up a stage — the list only ever grows.
 `title`
 
 </td>
-<td>Must match ≥ 2 of 5 criteria</td>
+<td>Must match ≥ 2 of 4 criteria</td>
 </tr>
 <tr>
 <td><b>2 — Try harder</b></td>
@@ -57,7 +57,7 @@ up a stage — the list only ever grows.
 `performer aliases + date`
 
 </td>
-<td>Same ≥ 2 of 5 filter</td>
+<td>Same ≥ 2 of 4 filter</td>
 </tr>
 <tr>
 <td><b>3 — Last chance</b></td>
@@ -77,19 +77,21 @@ fall back to, so the button retires itself and leaves a parting word in its plac
 
 ## Scoring
 
-Every release title is normalised (lowercased, punctuation stripped) and checked against five
+Every release title is normalised (lowercased, punctuation stripped) and checked against four
 fixed facts about the scene:
 
-**Studio** · **Parent studio** · **Performer** · **Title** · **Date**
+**Studio** · **Performer** · **Title** · **Date**
 
+- **Studio** matches the studio or, when the scene has one, its parent studio. Release names carry
+  one or the other, rarely both, so the parent studio is not a criterion of its own.
 - **Performer** matches on any cast member's name, the name she's credited as in this scene, or
   any of her aliases. Short single-word aliases are skipped for scoring, because something like
   "Mia" would match half the index.
 - **Title** matches on the whole title, or on at least 60 % of its significant words. Release
   names often cut long titles short.
 
-Stages 1 and 2 only show releases matching **at least 2 of 5** — that's what keeps the broad
-queries usable. Every row shows its own score inline (`3/5 hits (Studio, Performer 2/3, Date)`),
+Stages 1 and 2 only show releases matching **at least 2 of 4** — that's what keeps the broad
+queries usable. Every row shows its own score inline (`3/4 hits (Studio, Performer 2/3, Date)`),
 so you can see exactly why something is in the list. With more than one performer, the
 `2/3` tells you how much of the cast the release names. Within a resolution group, higher
 scores rank first, then releases naming more of the cast, then seeders/grabs.

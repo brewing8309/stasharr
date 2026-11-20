@@ -11,7 +11,7 @@
  * Stage 1 (automatic): 5 broad queries (performers+studio+date,
  * performers+date, performers+studio, studio+date, title — see
  * BROAD_QUERIES), merged/de-duplicated by guid, kept if they match at least
- * MIN_SCORE of the scene's known criteria (studio, parent studio, each
+ * MIN_SCORE of the scene's known criteria (studio or parent studio, each
  * performer/alias, title, date — see scoreRelease/CRITERIA).
  *
  * Stage 2 ("Try harder", click 1): SECOND_PASS_QUERIES — the same idea
