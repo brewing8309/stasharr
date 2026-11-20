@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.8.1 — 2026-11-20
+
+### Changed
+
+- **Parent studio counts as a Studio hit.** A scene whose studio has a parent (e.g. Vixen Media
+  Group) could never reach full marks, because release names rarely carry the parent. Studio now
+  matches the studio or its parent, and the hits count is out of 4 for every scene. Perfect
+  releases show 4/4 and are picked by Auto-Download.
+- **Toolbar icon:** a dedicated 16 px version of the logo with heavier segments, so it stays
+  legible in the Firefox toolbar.
+- **License is now CC BY-NC 4.0** (same as TorrentBakery): free to use and modify with credit,
+  not for commercial use or sale.
+- **README rewritten** with a quick start and design-matched graphics; details moved to `docs/`.
+
+### Fixed
+
+- **Auto-Download switch follows other tabs.** Flipping it in one StashDB tab now updates every
+  other open tab.
+
 ## 1.8.0 — 2026-11-20
 
 ### Changed
