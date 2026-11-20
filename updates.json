@@ -33,6 +33,10 @@
         {
           "version": "1.8.1",
           "update_link": "https://github.com/brewing8309/stasharr/releases/download/v1.8.1/stasharr-1.8.1.xpi"
+        },
+        {
+          "version": "1.9.0",
+          "update_link": "https://github.com/brewing8309/stasharr/releases/download/v1.9.0/stasharr-1.9.0.xpi"
         }
       ]
     }

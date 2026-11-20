@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.9.0 — 2026-11-20
+
+### Security
+
+- **No more access to every website.** stasharr used to hold `<all_urls>`. Now it only has
+  stashdb.org; the hosts of your Prowlarr and Stash are asked for when you press **Save
+  settings**, and nothing else. **After this update the preferences open once: press Save
+  settings and allow the access**, otherwise searches report "no access to Prowlarr yet".
+- **Buttons only react to you.** Search, download, Auto-DL, radar and "Try harder" ignore clicks
+  that stashdb.org's own scripts fire, so a script on that page can't send releases to Prowlarr
+  or change your Stash.
+- **Only stashdb.org and the preferences can talk to the background script.** Pages the
+  reverse-lookup panel or the Stash marker run on are refused.
+- **Preferences** reject URLs that aren't http(s) and warn when an API key would travel over
+  plain http to another machine.
+- **Less of your setup on stashdb.org's page:** error messages carry a shorter piece of the
+  server's answer, and timeouts name the path instead of your Prowlarr/Stash address.
+- **Release pipeline hardened:** actions pinned by commit, web-ext from a lockfile, signing
+  job read-only, release tags immutable.
+
 ## 1.8.1 — 2026-11-20
 
 ### Changed
