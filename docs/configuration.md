@@ -14,7 +14,17 @@ Open the add-on's preferences (`about:addons` → stasharr → Preferences) and 
 | **Stash URL** | — | no | Your own StashApp, e.g. `http://localhost:9999`. Enables the "already in your library" badge, the performer sidebars, the owned badge on scene cards and Stashboard's download buttons. |
 | **Stash API key** | — | no | Only if your Stash requires one. |
 
-**Test Prowlarr** and **Test Stash** verify each connection before you save.
+**Test Prowlarr** and **Test Stash** save the settings and verify each connection.
+
+**Access to your Prowlarr and Stash.** stasharr only holds access to stashdb.org. When you press
+**Save settings** or a **Test** button, Firefox asks to let it reach the hosts of the URLs you
+entered; allow it, otherwise every request reports "no access … yet". After changing a URL, save
+again to grant the new host. The granted hosts are listed under about:addons → stasharr →
+Permissions, where you can also take them back.
+
+**Plain http.** URLs must start with `http://` or `https://`. With plain `http://` to another
+machine (anything but `localhost`), the page warns that the API key travels unencrypted across
+your network. It still works; prefer https (e.g. through a reverse proxy) where you can.
 
 A couple of knobs are deliberately not in the UI, but are one-line edits if you want them:
 `MIN_SCORE` in `common.js` (the 2-of-5 threshold) and `LAST_CHANCE_LIMIT` in `content.js` (the

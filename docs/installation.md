@@ -7,6 +7,11 @@ and drag it into Firefox. That's it — from 1.3.0 on it **updates itself**: Fir
 checks [`updates.json`](../updates.json) in this repo and pulls newer releases like any other
 add-on. To check right away: `about:addons` → gear icon → **Check for Updates**.
 
+> [!NOTE]
+> **Updating to 1.9.0 from an older version:** 1.9.0 replaced the access to every website with
+> access to just your Prowlarr and Stash. Right after the update the preferences open once; press
+> **Save settings** and allow the access Firefox asks for.
+
 <details>
 <summary><b>Temporary — for trying out a branch</b> (gone on restart)</summary>
 
@@ -25,8 +30,9 @@ only ever be signed by the AMO account that owns it, so a fork first needs its o
 unlisted add-on, which never goes on the public store or through Mozilla's review:
 
 ```bash
-npm install --global web-ext
-web-ext sign --channel=unlisted \
+npm ci --ignore-scripts          # web-ext, at the version in package-lock.json
+npx --no-install web-ext sign --channel=unlisted \
+  --ignore-files tests docs updates.json package.json package-lock.json \
   --api-key="$AMO_JWT_ISSUER" \
   --api-secret="$AMO_JWT_SECRET"
 ```

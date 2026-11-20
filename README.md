@@ -1,7 +1,7 @@
 <img src="docs/assets/banner.png" alt="stasharr: from a StashDB scene to the release. One click." width="100%">
 
 <p align="center">
-  <a href="https://github.com/brewing8309/stasharr/releases/latest"><img alt="Version 1.8.0" src="https://img.shields.io/badge/version-1.8.0-FF6B2C?style=flat-square&labelColor=17181B"></a>
+  <a href="https://github.com/brewing8309/stasharr/releases/latest"><img alt="Version 1.9.0" src="https://img.shields.io/badge/version-1.9.0-FF6B2C?style=flat-square&labelColor=17181B"></a>
   <img alt="Firefox" src="https://img.shields.io/badge/Firefox-Manifest%20v2-FF6B2C?style=flat-square&labelColor=17181B">
   <img alt="No dependencies" src="https://img.shields.io/badge/dependencies-none-C6F03A?style=flat-square&labelColor=17181B">
   <a href="LICENSE"><img alt="License CC BY-NC 4.0" src="https://img.shields.io/badge/license-CC%20BY--NC%204.0-C6F03A?style=flat-square&labelColor=17181B"></a>
@@ -48,10 +48,13 @@ It runs entirely inside Firefox: no server, no telemetry, just your browser talk
 Download `stasharr-<version>.xpi` from [Releases](https://github.com/brewing8309/stasharr/releases/latest) and drag it into a Firefox window. Confirm the prompt. From then on it updates itself.
 
 ### 2. Connect Prowlarr
-`about:addons` → stasharr → **Preferences**. Enter the **Prowlarr URL** (e.g. `http://192.168.1.10:9696`, no trailing slash) and the **API key** from Prowlarr → Settings → General → Security. Press **Test Prowlarr**.
+`about:addons` → stasharr → **Preferences**. Enter the **Prowlarr URL** (e.g. `http://192.168.1.10:9696`, no trailing slash) and the **API key** from Prowlarr → Settings → General → Security. Press **Test Prowlarr** (or **Save settings**): Firefox asks once to let stasharr reach that address. Allow it.
 
 ### 3. Connect Stash *(optional)*
-Enter your **Stash URL** (and API key if Stash asks for one), press **Test Stash**, then **Save**. This switches on the badges and sidebars.
+Enter your **Stash URL** (and API key if Stash asks for one), press **Test Stash**, then **Save settings** and allow the access Firefox asks for. This switches on the badges and sidebars.
+
+> [!NOTE]
+> **Updating from 1.8 or older?** stasharr no longer has access to every website, only to the addresses you entered. After the update the preferences open once: press **Save settings** and allow the access.
 
 ### 4. Search
 Log in to StashDB in the same Firefox, open a scene (`stashdb.org/scenes/<id>`) and press **Search Prowlarr** in the dock. Nothing good? **Try harder**, then **Last chance**.
@@ -77,6 +80,7 @@ Press **Download** on the release you want. Prowlarr passes it to your download 
 
 ## 🧑‍🍳 Good to know
 - **Your data stays with you.** Keys live in `browser.storage.local` and are only sent to the Prowlarr and Stash URLs you typed. The manifest declares `data_collection_permissions: none`.
+- **Only the access it needs.** stashdb.org, plus the hosts of your Prowlarr and Stash once you allow them. Not every website. Details in the [security audit](SECURITY-AUDIT.md).
 - **Desktop Firefox only.** It is a Manifest v2 extension; Chrome, Edge and Android are not supported.
 - **It never downloads by itself.** It asks Prowlarr to grab a release; Prowlarr hands it to the client you set up there.
 

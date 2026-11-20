@@ -24,6 +24,20 @@ your Firefox talking to your Prowlarr, your Stash, and StashDB.
               └──────────────────────────────────────────────────────────┘
 ```
 
+## Permissions and trust
+
+- **What it can reach.** stashdb.org is the only host it always has. Your Prowlarr and Stash hosts
+  are optional permissions you grant on the preferences page; until then nothing is sent to them.
+  The reverse lookup injects its panel into the page you right-clicked on (`activeTab`).
+- **Who can ask the background script.** Only stasharr's own preferences page and its script on
+  `https://stashdb.org`. The API keys are added there, in request headers, and never reach a page.
+- **What stashdb.org can do.** Its scripts can see stasharr's panel and sidebars (they're part of
+  its page), but clicks they fake are ignored: searching, downloading, Auto-Download and the radar
+  only react to you.
+- Everything from Prowlarr, Stash and StashDB is shown as text, never as HTML.
+
+Details and remaining risks: [security audit](../SECURITY-AUDIT.md).
+
 ## The three stages
 
 <img src="assets/stages.png" alt="Three escalating search passes" width="100%">
