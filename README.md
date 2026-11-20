@@ -4,7 +4,7 @@
   <a href="https://github.com/brewing8309/stasharr/releases/latest"><img alt="Version 1.8.0" src="https://img.shields.io/badge/version-1.8.0-FF6B2C?style=flat-square&labelColor=17181B"></a>
   <img alt="Firefox" src="https://img.shields.io/badge/Firefox-Manifest%20v2-FF6B2C?style=flat-square&labelColor=17181B">
   <img alt="No dependencies" src="https://img.shields.io/badge/dependencies-none-C6F03A?style=flat-square&labelColor=17181B">
-  <a href="LICENSE"><img alt="License PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20NC%201.0.0-C6F03A?style=flat-square&labelColor=17181B"></a>
+  <a href="LICENSE"><img alt="License CC BY-NC 4.0" src="https://img.shields.io/badge/license-CC%20BY--NC%204.0-C6F03A?style=flat-square&labelColor=17181B"></a>
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 It runs entirely inside Firefox: no server, no telemetry, just your browser talking to your own Prowlarr, your own Stash and StashDB.
 
 > [!NOTE]
-> **100 % vibe-coded.** Every line of stasharr (code, tests, design and these docs) was written by an AI (Claude) from natural-language prompts. No human wrote or reviewed the code by hand. It ships with automated tests but no warranty. Read the code before you run it. *(This notice is a licensing requirement, see [License](#-license).)*
+> **100 % vibe-coded.** Every line of stasharr (code, tests, design and these docs) was written by an AI (Claude) from natural-language prompts. No human wrote or reviewed the code by hand. It ships with automated tests but no warranty. Read the code before you run it.
 
 ## 🔎 What you get
 
@@ -84,22 +84,7 @@ Bug reports and ideas are welcome as [issues](https://github.com/brewing8309/sta
 
 ## 📜 License
 
-[**PolyForm Noncommercial License 1.0.0**](LICENSE) — source available, not open source.
-
-**You can:** use it, fork it, modify it, redistribute it, run it at home or in any nonprofit,
-school or public institution. Go wild.
-
-**You must:** keep both Required Notices with it — the copyright line and the vibecoded
-statement — and keep them *visible* in any version you publish: in the README, and on the
-extension's preferences page. Reformat them however you like; just don't bury them or make them
-less prominent than your own credits. Nothing requires you to call *your* changes vibecoded.
-
-**You can't:** charge money for it, or use it commercially in any form.
-
-```
-Required Notice: Copyright 2026 brewing8309 — https://github.com/brewing8309/stasharr
-Required Notice: This software is vibecoded. It was written end to end by an AI (Claude) from natural-language prompts. No human wrote or reviewed the code by hand. It ships with automated tests but no warranty.
-```
+[CC BY-NC 4.0](LICENSE): use it, change it, share it, build on it, as you like, as long as you **credit stasharr with a link to this repository** and **do not charge money for it** or use it commercially.
 
 ## ⚖️ Disclaimer
 
